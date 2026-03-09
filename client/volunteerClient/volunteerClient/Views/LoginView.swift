@@ -1,7 +1,6 @@
 import SwiftUI
 
 private enum Constants {
-
     static let horizontalPadding: CGFloat = 30
     static let headerTopPadding: CGFloat = 160
     static let fieldsTopPadding: CGFloat = 20
@@ -13,144 +12,262 @@ private enum Constants {
 
     static let fieldHPadding: CGFloat = 18
     static let fieldVPadding: CGFloat = 16
+
+    static let fieldCornerRadius: CGFloat = 16
+    static let buttonCornerRadius: CGFloat = 16
 }
 
 struct LoginView: View {
-    @State private var fullName = ""
-    @State private var password = ""
-    @State private var confirmPassword = ""
-    @AppStorage("rememberMe") private var rememberMe = true
+    @StateObject private var vm = LoginViewModel()
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case username
+        case password
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading) {
-                VStack(alignment: .leading, spacing: Constants.headerSpacing) {
-                    Text("Login")
-                        .font(.custom("NotoSans-Bold", size: 38))
-                        .foregroundStyle(.black)
-
-                    Text("Glad you're back!")
-                        .font(.custom("NotoSans-Medium", size: 18))
-                        .foregroundStyle(.black.opacity(0.8))
-                }
-                .padding(.top, Constants.headerTopPadding)
+                header
 
                 VStack(spacing: Constants.fieldsSpacing) {
-                    LoginTextField(placeholder: "Username", text: $fullName)
-                    LoginSecureField(placeholder: "Password", text: $password)
+                    LoginTextField(
+                        placeholder: "Username",
+                        text: $vm.username,
+                        focus: $focusedField,
+                        field: .username,
+                        keyboard: .default,
+                        contentType: .username,
+                        autocapitalization: .never,
+                        submitLabel: .next
+                    ) {
+                        focusedField = .password
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        LoginSecureField(
+                            placeholder: "Password",
+                            text: $vm.password,
+                            focus: $focusedField,
+                            field: .password,
+                            contentType: .password,
+                            submitLabel: .go
+                        ) {
+                            performLogin()
+                        }
+
+                        if let passwordError = vm.passwordError {
+                            Text(passwordError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(.horizontal, 4)
+                        }
+                    }
                 }
                 .padding(.top, Constants.fieldsTopPadding)
 
-                Button {
-                    rememberMe.toggle()
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: rememberMe ? "checkmark.square.fill" : "square")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.black)
+                rememberMeToggle
+                    .padding(.top, 16)
 
-                        Text("Remember me")
-                            .foregroundStyle(.black)
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 16)
+                loginButton
+                    .padding(.top, Constants.buttonTopPadding)
 
-                Button {
-                    // TODO: signup action
-                } label: {
-                    Text("Login")
-                        .font(.custom("NotoSans-Bold", size: 20))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-                .padding(.top, Constants.buttonTopPadding)
-
-                HStack(spacing: 0) {
-                    Text("Don't have an account? ")
-                        .font(.custom("NotoSans-Medium", size: 15))
-                        .foregroundStyle(.black.opacity(0.85))
-                    Button {
-                        // TODO: navigate to login
-                    } label: {
-                        Text("Sign up")
-                            .font(.custom("NotoSans-Medium", size: 15))
-                            .underline()
-                            .foregroundStyle(.black)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, Constants.bottomButtonTopPadding)
+                bottomSignupRow
+                    .padding(.top, Constants.bottomButtonTopPadding)
             }
             .padding(.horizontal, Constants.horizontalPadding)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                focusedField = nil
+            }
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
+        .onChange(of: vm.username) { _ in
+            vm.clearPasswordError()
+        }
+        .onChange(of: vm.password) { _ in
+            vm.clearPasswordError()
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Constants.headerSpacing) {
+            Text("Login")
+                .font(.custom("NotoSans-Bold", size: 38)) 
+                .foregroundStyle(.black)
+
+            Text("Glad you're back!")
+                .font(.custom("NotoSans-Medium", size: 18))
+                .foregroundStyle(.black.opacity(0.8))
+        }
+        .padding(.top, Constants.headerTopPadding)
+    }
+
+    private var rememberMeToggle: some View {
+        Button {
+            vm.rememberMe.toggle()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: vm.rememberMe ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.black)
+
+                Text("Remember me")
+                    .foregroundStyle(.black)
+
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var loginButton: some View {
+        Button {
+            performLogin()
+        } label: {
+            Text("Login")
+                .font(.custom("NotoSans-Bold", size: 20))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(vm.isLoginDisabled ? Color.black.opacity(0.45) : Color.black)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: Constants.buttonCornerRadius, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(vm.isLoginDisabled || vm.isLoading)
+    }
+
+    private var bottomSignupRow: some View {
+        HStack(spacing: 0) {
+            Text("Don't have an account? ")
+                .font(.custom("NotoSans-Medium", size: 15))
+                .foregroundStyle(.black.opacity(0.85))
+
+            Button {
+                // TODO: navigate to sign up
+            } label: {
+                Text("Sign up")
+                    .font(.custom("NotoSans-Medium", size: 15))
+                    .underline()
+                    .foregroundStyle(.black)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func performLogin() {
+        focusedField = nil
+        Task {
+            _ = await vm.login()
+        }
     }
 }
 
-private struct LoginTextField: View {
+// MARK: - Reusable Fields
+
+private struct LoginTextField<FieldID: Hashable>: View {
     let placeholder: String
     @Binding var text: String
+
+    let focus: FocusState<FieldID?>.Binding
+    let field: FieldID
+
     var keyboard: UIKeyboardType = .default
+    var contentType: UITextContentType? = nil
+    var autocapitalization: TextInputAutocapitalization = .never
+    var submitLabel: SubmitLabel = .done
+    var onSubmit: (() -> Void)? = nil
 
     var body: some View {
         TextField(placeholder, text: $text)
             .keyboardType(keyboard)
+            .textInputAutocapitalization(autocapitalization)
             .autocorrectionDisabled()
+            .textContentType(contentType)
+            .submitLabel(submitLabel)
+            .focused(focus, equals: field)
+            .onSubmit { onSubmit?() }
             .padding(.horizontal, Constants.fieldHPadding)
             .padding(.vertical, Constants.fieldVPadding)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(.white))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(.black, lineWidth: 1)
-            )
+            .modifier(AuthFieldChrome())
             .foregroundStyle(.black)
     }
 }
 
-private struct LoginSecureField: View {
+private struct LoginSecureField<FieldID: Hashable>: View {
     let placeholder: String
     @Binding var text: String
+
+    let focus: FocusState<FieldID?>.Binding
+    let field: FieldID
+
+    var contentType: UITextContentType? = nil
+    var submitLabel: SubmitLabel = .done
+    var onSubmit: (() -> Void)? = nil
+
     @State private var isSecure = true
 
     var body: some View {
         HStack(spacing: 10) {
-            Group {
-                if isSecure {
-                    SecureField(placeholder, text: $text)
-                } else {
-                    TextField(placeholder, text: $text)
-                }
+            ZStack(alignment: .leading) {
+                SecureField(placeholder, text: $text)
+                    .textContentType(contentType)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(submitLabel)
+                    .focused(focus, equals: field)
+                    .onSubmit { onSubmit?() }
+                    .opacity(isSecure ? 1 : 0)
+                    .allowsHitTesting(isSecure)
+
+                TextField(placeholder, text: $text)
+                    .textContentType(contentType)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(submitLabel)
+                    .focused(focus, equals: field)
+                    .onSubmit { onSubmit?() }
+                    .opacity(isSecure ? 0 : 1)
+                    .allowsHitTesting(!isSecure)
             }
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
                 isSecure.toggle()
+                focus.wrappedValue = field
             } label: {
                 Image(systemName: isSecure ? "eye.slash" : "eye")
                     .foregroundStyle(.black.opacity(0.7))
+                    .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(isSecure ? "Show password" : "Hide password")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.black, lineWidth: 1)
-        )
+        .frame(minHeight: 22)
+        .padding(.horizontal, Constants.fieldHPadding)
+        .padding(.vertical, Constants.fieldVPadding)
+        .modifier(AuthFieldChrome())
         .foregroundStyle(.black)
+        .animation(.none, value: isSecure)
+    }
+}
+
+private struct AuthFieldChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: Constants.fieldCornerRadius, style: .continuous)
+                    .fill(Color.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Constants.fieldCornerRadius, style: .continuous)
+                    .stroke(.black, lineWidth: 1)
+            )
     }
 }
 
