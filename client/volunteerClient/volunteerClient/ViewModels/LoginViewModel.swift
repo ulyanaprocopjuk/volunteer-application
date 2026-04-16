@@ -3,50 +3,51 @@ import Combine
 
 @MainActor
 final class LoginViewModel: ObservableObject {
-    @Published var username: String = ""
-    @Published var password: String = ""
-    @Published var passwordError: String? = nil
-    @Published var rememberMe: Bool
+    @Published var username = ""
+    @Published var password = ""
+    @Published var isLoading = false
+    @Published var errorMessage: String?
 
-    @Published var isLoading: Bool = false
+    private let authAPI: AuthAPIProtocol
+    private unowned let session: AppSession
 
-    init() {
-        let saved = UserDefaults.standard.object(forKey: "rememberMe") as? Bool
-        self.rememberMe = saved ?? true
+    init(
+        session: AppSession,
+        authAPI: AuthAPIProtocol = AuthAPI()
+    ) {
+        self.session = session
+        self.authAPI = authAPI
     }
 
     var isLoginDisabled: Bool {
         username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || password.isEmpty
     }
 
-    func clearPasswordError() {
-        passwordError = nil
+    func clearError() {
+        errorMessage = nil
     }
 
-    @discardableResult
-    func login() async -> Bool {
-        guard !isLoginDisabled, !isLoading else { return false }
+    func login() async {
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanUsername.isEmpty else {
+            errorMessage = "Введите username"
+            return
+        }
+
+        guard !password.isEmpty else {
+            errorMessage = "Введите пароль"
+            return
+        }
 
         isLoading = true
         defer { isLoading = false }
 
-        passwordError = nil
-
-        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        UserDefaults.standard.set(rememberMe, forKey: "rememberMe")
-
         do {
-            let response = try await AuthService.shared.login(
-                username: trimmedUsername,
-                password: password,
-                rememberMe: rememberMe
-            )
-
-            print("Login success. user:", response.user.username, "role:", response.user.role.rawValue)
-            return true
+            let auth = try await authAPI.login(username: cleanUsername, password: password)
+            try await session.authorize(with: auth.accessToken, destination: .main)
         } catch {
-            passwordError = (error as? LocalizedError)?.errorDescription ?? "Ошибка входа"
-            return false
+            errorMessage = error.localizedDescription
         }
     }
 }

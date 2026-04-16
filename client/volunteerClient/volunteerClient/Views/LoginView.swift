@@ -26,6 +26,10 @@ struct LoginView: View {
         case password
     }
 
+    init() {
+        FontRegistrar.registerIfNeeded()
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading) {
@@ -33,7 +37,7 @@ struct LoginView: View {
 
                 VStack(spacing: Constants.fieldsSpacing) {
                     LoginTextField(
-                        placeholder: "Username",
+                        placeholder: "Имя пользователя",
                         text: $vm.username,
                         focus: $focusedField,
                         field: .username,
@@ -47,7 +51,7 @@ struct LoginView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         LoginSecureField(
-                            placeholder: "Password",
+                            placeholder: "Пароль",
                             text: $vm.password,
                             focus: $focusedField,
                             field: .password,
@@ -94,11 +98,11 @@ struct LoginView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Constants.headerSpacing) {
-            Text("Login")
-                .font(.custom("NotoSans-Bold", size: 38)) 
+            Text("Вход")
+                .font(.custom("NotoSans-Bold", size: 38))
                 .foregroundStyle(.black)
 
-            Text("Glad you're back!")
+            Text("Рады вас видеть снова!")
                 .font(.custom("NotoSans-Medium", size: 18))
                 .foregroundStyle(.black.opacity(0.8))
         }
@@ -114,7 +118,7 @@ struct LoginView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(.black)
 
-                Text("Remember me")
+                Text("Запомнить меня")
                     .foregroundStyle(.black)
 
                 Spacer()
@@ -127,7 +131,7 @@ struct LoginView: View {
         Button {
             performLogin()
         } label: {
-            Text("Login")
+            Text("Войти")
                 .font(.custom("NotoSans-Bold", size: 20))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -143,14 +147,14 @@ struct LoginView: View {
 
     private var bottomSignupRow: some View {
         HStack(spacing: 0) {
-            Text("Don't have an account? ")
+            Text("Еще нет аккаунта? ")
                 .font(.custom("NotoSans-Medium", size: 15))
                 .foregroundStyle(.black.opacity(0.85))
 
-            Button {
-                // TODO: navigate to sign up
+            NavigationLink {
+                SignUpView()
             } label: {
-                Text("Sign up")
+                Text("Зарегистрироваться")
                     .font(.custom("NotoSans-Medium", size: 15))
                     .underline()
                     .foregroundStyle(.black)

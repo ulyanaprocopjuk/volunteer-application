@@ -1,11 +1,13 @@
 import SwiftUI
 
 @main
-struct volunteerClientApp: App {
+struct LocalAuthApp: App {
+    @StateObject private var session = AppSession()
+
     var body: some Scene {
         WindowGroup {
-            LoginView()
-            SignUpView()
+            RootView()
+                .environmentObject(session)
         }
     }
 }

@@ -20,11 +20,16 @@ private enum Constants {
 struct SignUpView: View {
     @StateObject private var vm = SignUpViewModel()
     @FocusState private var focusedField: Field?
+    @Environment(\.dismiss) private var dismiss
 
     private enum Field: Hashable {
         case username
         case password
         case confirmPassword
+    }
+
+    init() {
+        FontRegistrar.registerIfNeeded()
     }
 
     var body: some View {
@@ -34,7 +39,7 @@ struct SignUpView: View {
 
                 VStack(spacing: Constants.fieldsSpacing) {
                     SignUpTextField(
-                        placeholder: "Username",
+                        placeholder: "Имя пользователя",
                         text: $vm.username,
                         focus: $focusedField,
                         field: .username,
@@ -47,7 +52,7 @@ struct SignUpView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         SignUpSecureField(
-                            placeholder: "Password",
+                            placeholder: "Пароль",
                             text: $vm.password,
                             focus: $focusedField,
                             field: .password,
@@ -77,7 +82,7 @@ struct SignUpView: View {
 
                     VStack(alignment: .leading, spacing: 6) {
                         SignUpSecureField(
-                            placeholder: "Confirm Password",
+                            placeholder: "Подтвердите пароль",
                             text: $vm.confirmPassword,
                             focus: $focusedField,
                             field: .confirmPassword,
@@ -134,11 +139,11 @@ struct SignUpView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Constants.headerSpacing) {
-            Text("Signup")
+            Text("Регистрация")
                 .font(.custom("NotoSans-Bold", size: 38))
                 .foregroundStyle(.black)
 
-            Text("Just some details to get you in.!")
+            Text("Создайте аккаунт за пару шагов")
                 .font(.custom("NotoSans-Medium", size: 18))
                 .foregroundStyle(.black.opacity(0.8))
         }
@@ -169,7 +174,7 @@ struct SignUpView: View {
         Button {
             performSignUp()
         } label: {
-            Text("Signup")
+            Text("Зарегистрироваться")
                 .font(.custom("NotoSans-Bold", size: 20))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -185,14 +190,14 @@ struct SignUpView: View {
 
     private var bottomLoginRow: some View {
         HStack(spacing: 0) {
-            Text("Already registered? ")
+            Text("Уже есть аккаунт? ")
                 .font(.custom("NotoSans-Medium", size: 15))
                 .foregroundStyle(.black.opacity(0.85))
 
             Button {
-                // TODO: navigate to login
+                dismiss()
             } label: {
-                Text("Login")
+                Text("Войти")
                     .font(.custom("NotoSans-Medium", size: 15))
                     .underline()
                     .foregroundStyle(.black)

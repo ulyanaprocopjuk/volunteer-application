@@ -3,101 +3,82 @@ import Combine
 
 @MainActor
 final class SignUpViewModel: ObservableObject {
-    @Published var username: String = ""
-    @Published var password: String = ""
-    @Published var confirmPassword: String = ""
+    @Published var username = ""
+    @Published var password = ""
+    @Published var confirmPassword = ""
+    @Published var isLoading = false
+    @Published var signUpError: String?
 
-    @Published var isLoading: Bool = false
-    @Published var signUpError: String? = nil
+    private let authAPI: AuthAPIProtocol
+    private unowned let session: AppSession
 
-    var trimmedUsername: String {
-        username.trimmingCharacters(in: .whitespacesAndNewlines)
+    init(
+        session: AppSession,
+        authAPI: AuthAPIProtocol = AuthAPI()
+    ) {
+        self.session = session
+        self.authAPI = authAPI
     }
 
-    // MARK: - Password validation
-
     var passwordValidationErrors: [String] {
-        guard !password.isEmpty else { return [] }
-
         var errors: [String] = []
 
-        if password.count < 7 {
-            errors.append("Минимум 7 символов")
+        if password.count < 8 {
+            errors.append("Минимум 8 символов")
         }
-
         if password.rangeOfCharacter(from: .uppercaseLetters) == nil {
             errors.append("Хотя бы одна заглавная буква")
         }
-
-        if password.rangeOfCharacter(from: .lowercaseLetters) == nil {
-            errors.append("Хотя бы одна строчная буква")
-        }
-
         if password.rangeOfCharacter(from: .decimalDigits) == nil {
             errors.append("Хотя бы одна цифра")
-        }
-
-        let specialSet = CharacterSet.punctuationCharacters.union(.symbols)
-        if password.rangeOfCharacter(from: specialSet) == nil {
-            errors.append("Хотя бы один спецсимвол")
-        }
-
-        if password.rangeOfCharacter(from: .whitespacesAndNewlines) != nil {
-            errors.append("Без пробелов")
         }
 
         return errors
     }
 
-    var isPasswordValid: Bool {
-        !password.isEmpty && passwordValidationErrors.isEmpty
-    }
-
-    // MARK: - Confirm password
-
-    var passwordsMatch: Bool {
-        password == confirmPassword
-    }
-
     var confirmPasswordError: String? {
         guard !confirmPassword.isEmpty else { return nil }
-        return passwordsMatch ? nil : "Пароли не совпадают"
+        return password == confirmPassword ? nil : "Пароли не совпадают"
     }
 
-    // MARK: - Form state
-
     var isSignUpDisabled: Bool {
-        trimmedUsername.isEmpty ||
-        !isPasswordValid ||
-        confirmPassword.isEmpty ||
-        !passwordsMatch
+        username.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 ||
+        !passwordValidationErrors.isEmpty ||
+        password != confirmPassword ||
+        confirmPassword.isEmpty
     }
 
     func clearServerError() {
         signUpError = nil
     }
 
-    @discardableResult
-    func signUp() async -> Bool {
-        guard !isSignUpDisabled, !isLoading else { return false }
+    func signUp() async {
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard cleanUsername.count >= 3 else {
+            signUpError = "Username должен быть не короче 3 символов"
+            return
+        }
+
+        guard passwordValidationErrors.isEmpty else {
+            signUpError = "Пароль не соответствует требованиям"
+            return
+        }
+
+        guard password == confirmPassword else {
+            signUpError = "Пароли не совпадают"
+            return
+        }
 
         isLoading = true
         defer { isLoading = false }
 
-        signUpError = nil
-
         do {
-            let response = try await AuthService.shared.register(
-                username: trimmedUsername,
-                password: password,
-                rememberMe: true
-            )
-
-            print("Signup success. user:", response.user.username, "role:", response.user.role.rawValue)
-            return true
+            _ = try await authAPI.register(username: cleanUsername, password: password)
+            let auth = try await authAPI.login(username: cleanUsername, password: password)
+            try await session.authorize(with: auth.accessToken, destination: .profileSetup)
         } catch {
-            signUpError = (error as? LocalizedError)?.errorDescription ?? "Не удалось зарегистрироваться"
-            return false
+            signUpError = error.localizedDescription
         }
     }
 }
