@@ -5,6 +5,7 @@ import Combine
 final class LoginViewModel: ObservableObject {
     @Published var username = ""
     @Published var password = ""
+    @Published var rememberMe = false
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -13,10 +14,10 @@ final class LoginViewModel: ObservableObject {
 
     init(
         session: AppSession,
-        authAPI: AuthAPIProtocol = AuthAPI()
+        authAPI: AuthAPIProtocol? = nil
     ) {
         self.session = session
-        self.authAPI = authAPI
+        self.authAPI = authAPI ?? AuthAPI()
     }
 
     var isLoginDisabled: Bool {

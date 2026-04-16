@@ -60,10 +60,10 @@ final class ProfileSetupViewModel: ObservableObject {
 
     init(
         session: AppSession,
-        api: ProfileAPIProtocol = ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        api: ProfileAPIProtocol? = nil
     ) {
         self.session = session
-        self.api = api
+        self.api = api ?? ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
     }
 
     var isVolunteer: Bool {

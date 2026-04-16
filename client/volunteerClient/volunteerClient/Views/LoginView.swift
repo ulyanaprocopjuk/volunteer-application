@@ -18,15 +18,18 @@ private enum Constants {
 }
 
 struct LoginView: View {
-    @StateObject private var vm = LoginViewModel()
+    @StateObject private var vm: LoginViewModel
     @FocusState private var focusedField: Field?
+    private let session: AppSession
 
     private enum Field: Hashable {
         case username
         case password
     }
 
-    init() {
+    init(session: AppSession) {
+        self.session = session
+        _vm = StateObject(wrappedValue: LoginViewModel(session: session))
         FontRegistrar.registerIfNeeded()
     }
 
@@ -61,8 +64,8 @@ struct LoginView: View {
                             performLogin()
                         }
 
-                        if let passwordError = vm.passwordError {
-                            Text(passwordError)
+                        if let errorMessage = vm.errorMessage {
+                            Text(errorMessage)
                                 .font(.caption)
                                 .foregroundStyle(.red)
                                 .padding(.horizontal, 4)
@@ -88,11 +91,11 @@ struct LoginView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
-        .onChange(of: vm.username) { _ in
-            vm.clearPasswordError()
+        .onChange(of: vm.username) { _, _ in
+            vm.clearError()
         }
-        .onChange(of: vm.password) { _ in
-            vm.clearPasswordError()
+        .onChange(of: vm.password) { _, _ in
+            vm.clearError()
         }
     }
 
@@ -152,7 +155,7 @@ struct LoginView: View {
                 .foregroundStyle(.black.opacity(0.85))
 
             NavigationLink {
-                SignUpView()
+                SignUpView(session: session)
             } label: {
                 Text("Зарегистрироваться")
                     .font(.custom("NotoSans-Medium", size: 15))
@@ -167,7 +170,7 @@ struct LoginView: View {
     private func performLogin() {
         focusedField = nil
         Task {
-            _ = await vm.login()
+            await vm.login()
         }
     }
 }
@@ -276,5 +279,5 @@ private struct AuthFieldChrome: ViewModifier {
 }
 
 #Preview {
-    LoginView()
+    LoginView(session: AppSession())
 }

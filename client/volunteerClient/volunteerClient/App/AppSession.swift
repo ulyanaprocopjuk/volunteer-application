@@ -26,13 +26,13 @@ final class AppSession: ObservableObject {
     private let installState: InstallState
 
     init(
-        authAPI: AuthAPIProtocol = AuthAPI(),
-        keychain: KeychainStorage = KeychainStorage(),
-        installState: InstallState = InstallState()
+        authAPI: AuthAPIProtocol? = nil,
+        keychain: KeychainStorage? = nil,
+        installState: InstallState? = nil
     ) {
-        self.authAPI = authAPI
-        self.keychain = keychain
-        self.installState = installState
+        self.authAPI = authAPI ?? AuthAPI()
+        self.keychain = keychain ?? KeychainStorage()
+        self.installState = installState ?? InstallState()
 
         handleFreshInstallIfNeeded()
 

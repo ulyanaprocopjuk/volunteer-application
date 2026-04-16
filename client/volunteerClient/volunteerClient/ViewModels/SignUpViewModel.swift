@@ -14,10 +14,10 @@ final class SignUpViewModel: ObservableObject {
 
     init(
         session: AppSession,
-        authAPI: AuthAPIProtocol = AuthAPI()
+        authAPI: AuthAPIProtocol? = nil
     ) {
         self.session = session
-        self.authAPI = authAPI
+        self.authAPI = authAPI ?? AuthAPI()
     }
 
     var passwordValidationErrors: [String] {

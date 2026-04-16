@@ -2,11 +2,11 @@ import SwiftUI
 import PhotosUI
 
 struct ProfileSetupView: View {
-    @StateObject private var viewModel: ProfileSetupViewModel
+    @ObservedObject private var viewModel: ProfileSetupViewModel
     @State private var selectedPhotoItem: PhotosPickerItem?
 
     init(viewModel: ProfileSetupViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
 
         UISegmentedControl.appearance().setTitleTextAttributes(
             [.font: UIFont.systemFont(ofSize: 17, weight: .medium)],
@@ -78,15 +78,14 @@ struct ProfileSetupView: View {
             await loadPhoto()
         }
         .alert("Сообщение", isPresented: Binding(
-            get: { viewModel.alertMessage != nil || viewModel.didSave },
+            get: { viewModel.errorMessage != nil },
             set: { _ in
-                viewModel.alertMessage = nil
-                viewModel.didSave = false
+                viewModel.errorMessage = nil
             }
         )) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text(viewModel.didSave ? "Профиль сохранён" : (viewModel.alertMessage ?? ""))
+            Text(viewModel.errorMessage ?? "")
         }
     }
 
@@ -113,9 +112,12 @@ struct ProfileSetupView: View {
     }
 
     private var avatarSection: some View {
-        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+        let avatarImage = viewModel.avatarImage
+        let isVolunteer = viewModel.isVolunteer
+
+        return PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
             ZStack {
-                if let avatar = viewModel.avatarImage {
+                if let avatar = avatarImage {
                     Image(uiImage: avatar)
                         .resizable()
                         .scaledToFill()
@@ -126,7 +128,7 @@ struct ProfileSetupView: View {
                         .fill(Color(red: 231/255, green: 243/255, blue: 247/255))
                         .frame(width: 104, height: 104)
 
-                    Image(systemName: viewModel.isVolunteer ? "person.fill" : "building.2.fill")
+                    Image(systemName: isVolunteer ? "person.fill" : "building.2.fill")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 40, height: 40)
@@ -153,12 +155,12 @@ struct ProfileSetupView: View {
         do {
             guard let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
                   let image = UIImage(data: data) else {
-                viewModel.alertMessage = "Не удалось загрузить фото"
+                viewModel.errorMessage = "Не удалось загрузить фото"
                 return
             }
             viewModel.setAvatar(image)
         } catch {
-            viewModel.alertMessage = "Не удалось открыть фото"
+            viewModel.errorMessage = "Не удалось открыть фото"
         }
     }
 }
@@ -167,8 +169,7 @@ struct ProfileSetupView: View {
     NavigationStack {
         ProfileSetupView(
             viewModel: ProfileSetupViewModel(
-                api: ProfileAPI(baseURL: URL(string: "http://127.0.0.1:8000/")!),
-                tokenProvider: { "YOUR_ACCESS_TOKEN" }
+                session: AppSession()
             )
         )
     }

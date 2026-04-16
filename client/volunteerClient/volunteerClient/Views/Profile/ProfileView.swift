@@ -552,5 +552,5 @@ struct FlowLayout: Layout {
 }
 
 #Preview {
-    
+    ProfileView(model: ProfileSetupViewModel(session: AppSession()))
 }

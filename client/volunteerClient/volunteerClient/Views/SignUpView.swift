@@ -18,7 +18,7 @@ private enum Constants {
 }
 
 struct SignUpView: View {
-    @StateObject private var vm = SignUpViewModel()
+    @StateObject private var vm: SignUpViewModel
     @FocusState private var focusedField: Field?
     @Environment(\.dismiss) private var dismiss
 
@@ -28,7 +28,8 @@ struct SignUpView: View {
         case confirmPassword
     }
 
-    init() {
+    init(session: AppSession) {
+        _vm = StateObject(wrappedValue: SignUpViewModel(session: session))
         FontRegistrar.registerIfNeeded()
     }
 
@@ -124,15 +125,15 @@ struct SignUpView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
-        .onChange(of: vm.username) { newValue in
+        .onChange(of: vm.username) { _, newValue in
             vm.username = newValue.replacingOccurrences(of: " ", with: "")
             vm.clearServerError()
         }
         
-        .onChange(of: vm.password) { _ in
+        .onChange(of: vm.password) { _, _ in
             vm.clearServerError()
         }
-        .onChange(of: vm.confirmPassword) { _ in
+        .onChange(of: vm.confirmPassword) { _, _ in
             vm.clearServerError()
         }
     }
@@ -210,7 +211,7 @@ struct SignUpView: View {
     private func performSignUp() {
         focusedField = nil
         Task {
-            _ = await vm.signUp()
+            await vm.signUp()
         }
     }
 }
@@ -319,5 +320,5 @@ private struct AuthFieldChrome: ViewModifier {
 }
 
 #Preview {
-    SignUpView()
+    SignUpView(session: AppSession())
 }

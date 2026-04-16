@@ -42,9 +42,8 @@ private struct ProfileSetupScreen: View {
 
         _viewModel = StateObject(
             wrappedValue: ProfileSetupViewModel(
-                api: profileAPI,
-                tokenProvider: { session.token },
-                onProfileSaved: { session.completeProfileSetup() }
+                session: session,
+                api: profileAPI
             )
         )
     }
