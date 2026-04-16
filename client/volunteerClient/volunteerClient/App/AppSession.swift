@@ -8,7 +8,6 @@ final class AppSession: ObservableObject {
         case auth
         case profileSetup
         case main
-        case admin
     }
 
     enum PostAuthDestination {
@@ -46,17 +45,25 @@ final class AppSession: ObservableObject {
         globalError = nil
 
         do {
-            guard let savedToken = try keychain.loadToken(), !savedToken.isEmpty else {
-                token = nil
-                currentUser = nil
-                flow = .auth
+            let savedAccessToken = try keychain.loadAccessToken()
+            let savedRefreshToken = try keychain.loadRefreshToken()
+
+            if let savedAccessToken, !savedAccessToken.isEmpty, !jwtIsExpired(savedAccessToken) {
+                let user = try await authAPI.getCurrentUser(token: savedAccessToken)
+                token = savedAccessToken
+                currentUser = user
+                flow = .main
                 return
             }
 
-            let user = try await authAPI.getCurrentUser(token: savedToken)
-            token = savedToken
-            currentUser = user
-            flow = user.role == .admin ? .admin : .main
+            if let savedRefreshToken, !savedRefreshToken.isEmpty {
+                _ = try await refreshAccessToken(using: savedRefreshToken)
+                flow = .main
+                return
+            }
+
+            clearLocalStateOnly()
+            flow = .auth
         } catch {
             clearSessionState()
             globalError = error.localizedDescription
@@ -64,25 +71,39 @@ final class AppSession: ObservableObject {
         }
     }
 
-    func authorize(with token: String, destination: PostAuthDestination) async throws {
-        let user = try await authAPI.getCurrentUser(token: token)
+    func authorize(with tokenResponse: TokenResponse, destination: PostAuthDestination) async throws {
+        let user = try await authAPI.getCurrentUser(token: tokenResponse.accessToken)
 
-        try keychain.saveToken(token)
+        try keychain.saveAccessToken(tokenResponse.accessToken)
+        try keychain.saveRefreshToken(tokenResponse.refreshToken)
 
-        self.token = token
+        self.token = tokenResponse.accessToken
         self.currentUser = user
         self.globalError = nil
 
-        if user.role == .admin {
-            flow = .admin
-        } else {
-            switch destination {
-            case .profileSetup:
-                flow = .profileSetup
-            case .main:
-                flow = .main
-            }
+        switch destination {
+        case .profileSetup:
+            flow = .profileSetup
+        case .main:
+            flow = .main
         }
+    }
+
+    func validAccessToken() async throws -> String {
+        if let token, !token.isEmpty, !jwtIsExpired(token) {
+            return token
+        }
+
+        guard let savedRefreshToken = try keychain.loadRefreshToken(),
+              !savedRefreshToken.isEmpty else {
+            throw NSError(
+                domain: "Auth",
+                code: 401,
+                userInfo: [NSLocalizedDescriptionKey: "Сессия истекла. Войдите снова."]
+            )
+        }
+
+        return try await refreshAccessToken(using: savedRefreshToken)
     }
 
     func completeProfileSetup() {
@@ -90,9 +111,16 @@ final class AppSession: ObservableObject {
     }
 
     func logout() {
-        clearSessionState()
-        globalError = nil
-        flow = .auth
+        Task {
+            if let refreshToken = try? keychain.loadRefreshToken(),
+               !refreshToken.isEmpty {
+                try? await authAPI.logout(refreshToken: refreshToken)
+            }
+
+            clearSessionState()
+            globalError = nil
+            flow = .auth
+        }
     }
 
     var isAuthenticated: Bool {
@@ -103,20 +131,82 @@ final class AppSession: ObservableObject {
         guard installState.isFreshInstall() else { return }
 
         do {
-            try keychain.clearToken()
+            try keychain.clearAll()
         } catch {
             globalError = error.localizedDescription
         }
     }
 
+    private func refreshAccessToken() async throws -> String {
+        guard let savedRefreshToken = try keychain.loadRefreshToken(),
+              !savedRefreshToken.isEmpty else {
+            throw NSError(
+                domain: "Auth",
+                code: 401,
+                userInfo: [NSLocalizedDescriptionKey: "Refresh token отсутствует"]
+            )
+        }
+
+        return try await refreshAccessToken(using: savedRefreshToken)
+    }
+
+    private func refreshAccessToken(using refreshToken: String) async throws -> String {
+        let tokenResponse = try await authAPI.refresh(refreshToken: refreshToken)
+        let user = try await authAPI.getCurrentUser(token: tokenResponse.accessToken)
+
+        try keychain.saveAccessToken(tokenResponse.accessToken)
+        try keychain.saveRefreshToken(tokenResponse.refreshToken)
+
+        self.token = tokenResponse.accessToken
+        self.currentUser = user
+        self.globalError = nil
+
+        return tokenResponse.accessToken
+    }
+
     private func clearSessionState() {
         do {
-            try keychain.clearToken()
+            try keychain.clearAll()
         } catch {
             globalError = error.localizedDescription
         }
 
+        clearLocalStateOnly()
+    }
+
+    private func clearLocalStateOnly() {
         token = nil
         currentUser = nil
+    }
+
+    private func jwtIsExpired(_ token: String) -> Bool {
+        guard let payload = decodeJWTPayload(token),
+              let exp = payload["exp"] as? NSNumber else {
+            return true
+        }
+
+        let expiryDate = Date(timeIntervalSince1970: exp.doubleValue)
+        return expiryDate <= Date().addingTimeInterval(30)
+    }
+
+    private func decodeJWTPayload(_ token: String) -> [String: Any]? {
+        let segments = token.split(separator: ".")
+        guard segments.count == 3 else { return nil }
+
+        var base64 = String(segments[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        let padding = 4 - base64.count % 4
+        if padding < 4 {
+            base64 += String(repeating: "=", count: padding)
+        }
+
+        guard let data = Data(base64Encoded: base64),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        return object
     }
 }

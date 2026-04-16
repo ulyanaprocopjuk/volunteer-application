@@ -17,10 +17,40 @@ enum KeychainError: LocalizedError {
 
 final class KeychainStorage {
     private let service = "com.yourapp.localauth"
-    private let account = "auth_token"
+    private let accessAccount = "access_token"
+    private let refreshAccount = "refresh_token"
 
-    func saveToken(_ token: String) throws {
-        let data = Data(token.utf8)
+    func saveAccessToken(_ token: String) throws {
+        try save(token, account: accessAccount)
+    }
+
+    func saveRefreshToken(_ token: String) throws {
+        try save(token, account: refreshAccount)
+    }
+
+    func loadAccessToken() throws -> String? {
+        try load(account: accessAccount)
+    }
+
+    func loadRefreshToken() throws -> String? {
+        try load(account: refreshAccount)
+    }
+
+    func clearAccessToken() throws {
+        try clear(account: accessAccount)
+    }
+
+    func clearRefreshToken() throws {
+        try clear(account: refreshAccount)
+    }
+
+    func clearAll() throws {
+        try clearAccessToken()
+        try clearRefreshToken()
+    }
+
+    private func save(_ value: String, account: String) throws {
+        let data = Data(value.utf8)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -54,7 +84,7 @@ final class KeychainStorage {
         }
     }
 
-    func loadToken() throws -> String? {
+    private func load(account: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -75,14 +105,14 @@ final class KeychainStorage {
         }
 
         guard let data = item as? Data,
-              let token = String(data: data, encoding: .utf8) else {
+              let value = String(data: data, encoding: .utf8) else {
             throw KeychainError.unexpectedData
         }
 
-        return token
+        return value
     }
 
-    func clearToken() throws {
+    private func clear(account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

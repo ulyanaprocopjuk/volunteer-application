@@ -76,7 +76,7 @@ final class SignUpViewModel: ObservableObject {
         do {
             _ = try await authAPI.register(username: cleanUsername, password: password)
             let auth = try await authAPI.login(username: cleanUsername, password: password)
-            try await session.authorize(with: auth.accessToken, destination: .profileSetup)
+            try await session.authorize(with: auth, destination: .profileSetup)
         } catch {
             signUpError = error.localizedDescription
         }

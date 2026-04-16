@@ -46,7 +46,7 @@ final class LoginViewModel: ObservableObject {
 
         do {
             let auth = try await authAPI.login(username: cleanUsername, password: password)
-            try await session.authorize(with: auth.accessToken, destination: .main)
+            try await session.authorize(with: auth, destination: .main)
         } catch {
             errorMessage = error.localizedDescription
         }

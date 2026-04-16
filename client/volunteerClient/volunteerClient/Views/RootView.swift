@@ -20,10 +20,6 @@ struct RootView: View {
                 NavigationStack {
                     MainPlaceholderView(onLogout: session.logout)
                 }
-            case .admin:
-                NavigationStack {
-                    AdminPlaceholderView(onLogout: session.logout)
-                }
             }
         }
     }
@@ -63,21 +59,6 @@ private struct MainPlaceholderView: View {
 
             Text("Пока не реализован")
                 .foregroundStyle(.secondary)
-
-            Button("Выйти", action: onLogout)
-                .buttonStyle(.borderedProminent)
-        }
-        .padding()
-    }
-}
-
-private struct AdminPlaceholderView: View {
-    let onLogout: () -> Void
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Admin screen")
-                .font(.title2.bold())
 
             Button("Выйти", action: onLogout)
                 .buttonStyle(.borderedProminent)

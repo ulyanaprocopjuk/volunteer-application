@@ -3,6 +3,8 @@ import Foundation
 protocol AuthAPIProtocol {
     func register(username: String, password: String) async throws -> UserResponse
     func login(username: String, password: String) async throws -> TokenResponse
+    func refresh(refreshToken: String) async throws -> TokenResponse
+    func logout(refreshToken: String) async throws
     func getCurrentUser(token: String) async throws -> UserResponse
     func getAllUsersForAdmin(token: String) async throws -> [UserResponse]
 }
@@ -63,6 +65,28 @@ final class AuthAPI: AuthAPIProtocol {
         )
     }
 
+    func refresh(refreshToken: String) async throws -> TokenResponse {
+        let body = RefreshRequest(refreshToken: refreshToken)
+        return try await performRequest(
+            path: "/auth/refresh",
+            method: "POST",
+            body: encoder.encode(body),
+            token: nil,
+            responseType: TokenResponse.self
+        )
+    }
+
+    func logout(refreshToken: String) async throws {
+        let body = RefreshRequest(refreshToken: refreshToken)
+        _ = try await performRequest(
+            path: "/auth/logout",
+            method: "POST",
+            body: encoder.encode(body),
+            token: nil,
+            responseType: EmptyResponse.self
+        )
+    }
+
     func getCurrentUser(token: String) async throws -> UserResponse {
         try await performRequest(
             path: "/users/me",
@@ -116,7 +140,9 @@ final class AuthAPI: AuthAPIProtocol {
 
         guard (200..<300).contains(httpResponse.statusCode) else {
             let serverMessage = try? decoder.decode(ServerErrorResponse.self, from: data)
-            throw AppNetworkError.server(serverMessage?.detail ?? "Ошибка сервера: \(httpResponse.statusCode)")
+            throw AppNetworkError.server(
+                serverMessage?.detail ?? "Ошибка сервера: \(httpResponse.statusCode)"
+            )
         }
 
         do {
@@ -126,3 +152,5 @@ final class AuthAPI: AuthAPIProtocol {
         }
     }
 }
+
+private struct EmptyResponse: Decodable {}
