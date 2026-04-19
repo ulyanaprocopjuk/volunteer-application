@@ -36,6 +36,125 @@ struct LabeledInputField: View {
     }
 }
 
+struct LabeledPhoneField: View {
+    let title: String
+    @Binding var localNumber: String
+    let selectedCountry: ProfileSetupViewModel.PhoneCountry
+    let countries: [ProfileSetupViewModel.PhoneCountry]
+    let error: String?
+    let onSelectCountry: (ProfileSetupViewModel.PhoneCountry) -> Void
+
+    @State private var isCountryPickerPresented = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 17, weight: .regular, design: .serif))
+                .padding(.leading, 8)
+
+            HStack(spacing: 10) {
+                Button {
+                    isCountryPickerPresented = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(selectedCountry.flag)
+                            .font(.system(size: 18))
+
+                        Text(selectedCountry.code)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.black)
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.gray)
+                    }
+                    .frame(minWidth: 94, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+
+                Rectangle()
+                    .fill(Color.gray.opacity(0.35))
+                    .frame(width: 1, height: 28)
+
+                TextField(selectedCountry.placeholder, text: $localNumber)
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+                    .font(.system(size: 15))
+                    .foregroundColor(.black)
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 58)
+            .overlay(
+                Capsule()
+                    .stroke(error == nil ? Color.gray.opacity(0.5) : Color.red, lineWidth: 1)
+            )
+
+            if let error {
+                Text(error)
+                    .font(.system(size: 13))
+                    .foregroundColor(.red)
+                    .padding(.leading, 8)
+            }
+        }
+        .sheet(isPresented: $isCountryPickerPresented) {
+            PhoneCountrySelectionSheet(
+                countries: countries,
+                selectedCountry: selectedCountry
+            ) { country in
+                onSelectCountry(country)
+                isCountryPickerPresented = false
+            }
+        }
+    }
+}
+
+struct PhoneCountrySelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let countries: [ProfileSetupViewModel.PhoneCountry]
+    let selectedCountry: ProfileSetupViewModel.PhoneCountry
+    let onSelect: (ProfileSetupViewModel.PhoneCountry) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List(countries) { country in
+                Button {
+                    onSelect(country)
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(country.flag)
+                            .font(.system(size: 22))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(country.name)
+                                .foregroundColor(.black)
+
+                            Text(country.code)
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+                        }
+
+                        Spacer()
+
+                        if country == selectedCountry {
+                            Image(systemName: "checkmark")
+                                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle("Код страны")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Закрыть") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 struct LabeledMultilineField: View {
     let title: String
     @Binding var text: String
@@ -189,7 +308,7 @@ struct ChipFlowLayout: Layout {
     var spacing: CGFloat = 10
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? UIScreen.main.bounds.width
+        let maxWidth = proposal.width ?? 320
         var currentX: CGFloat = 0
         var currentY: CGFloat = 0
         var rowHeight: CGFloat = 0

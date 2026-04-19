@@ -16,6 +16,31 @@ final class ProfileSetupViewModel: ObservableObject {
         }
     }
 
+    struct PhoneCountry: Identifiable, Equatable {
+        let name: String
+        let code: String
+        let flag: String
+        let placeholder: String
+        let localNumberLength: Int
+
+        var id: String {
+            "\(name)-\(code)"
+        }
+
+        static let cisCountries: [PhoneCountry] = [
+            PhoneCountry(name: "Беларусь", code: "+375", flag: "🇧🇾", placeholder: "291234567", localNumberLength: 9),
+            PhoneCountry(name: "Россия", code: "+7", flag: "🇷🇺", placeholder: "9123456789", localNumberLength: 10),
+            PhoneCountry(name: "Казахстан", code: "+7", flag: "🇰🇿", placeholder: "7012345678", localNumberLength: 10),
+            PhoneCountry(name: "Армения", code: "+374", flag: "🇦🇲", placeholder: "77123456", localNumberLength: 8),
+            PhoneCountry(name: "Азербайджан", code: "+994", flag: "🇦🇿", placeholder: "501234567", localNumberLength: 9),
+            PhoneCountry(name: "Кыргызстан", code: "+996", flag: "🇰🇬", placeholder: "700123456", localNumberLength: 9),
+            PhoneCountry(name: "Молдова", code: "+373", flag: "🇲🇩", placeholder: "60123456", localNumberLength: 8),
+            PhoneCountry(name: "Таджикистан", code: "+992", flag: "🇹🇯", placeholder: "901234567", localNumberLength: 9),
+            PhoneCountry(name: "Туркменистан", code: "+993", flag: "🇹🇲", placeholder: "61234567", localNumberLength: 8),
+            PhoneCountry(name: "Узбекистан", code: "+998", flag: "🇺🇿", placeholder: "901234567", localNumberLength: 9)
+        ]
+    }
+
     @Published var selectedType: ProfileType = .volunteer
     @Published var avatarImage: UIImage?
     private var avatarData: Data?
@@ -23,6 +48,7 @@ final class ProfileSetupViewModel: ObservableObject {
     @Published var firstName = ""
     @Published var lastName = ""
     @Published var volunteerPhone = ""
+    @Published var selectedVolunteerPhoneCountry = PhoneCountry.cisCountries[0]
     @Published var volunteerEmail = ""
     @Published var volunteerLocation = ""
     @Published var selectedSkills: Set<String> = []
@@ -30,6 +56,7 @@ final class ProfileSetupViewModel: ObservableObject {
 
     @Published var organizationName = ""
     @Published var organizationPhone = ""
+    @Published var selectedOrganizationPhoneCountry = PhoneCountry.cisCountries[0]
     @Published var organizationEmail = ""
     @Published var organizationLocation = ""
     @Published var aboutOrganization = ""
@@ -70,12 +97,32 @@ final class ProfileSetupViewModel: ObservableObject {
         selectedType == .volunteer
     }
 
+    var phoneCountries: [PhoneCountry] {
+        PhoneCountry.cisCountries
+    }
+
+    var volunteerLocalPhoneNumber: String {
+        localDigits(from: volunteerPhone, fallbackCountry: selectedVolunteerPhoneCountry)
+    }
+
+    var organizationLocalPhoneNumber: String {
+        localDigits(from: organizationPhone, fallbackCountry: selectedOrganizationPhoneCountry)
+    }
+
     var volunteerEmailError: String? {
         validateEmail(volunteerEmail)
     }
 
     var organizationEmailError: String? {
         validateEmail(organizationEmail)
+    }
+
+    var volunteerPhoneError: String? {
+        validatePhone(volunteerPhone, country: selectedVolunteerPhoneCountry)
+    }
+
+    var organizationPhoneError: String? {
+        validatePhone(organizationPhone, country: selectedOrganizationPhoneCountry)
     }
 
     var volunteerLocationError: String? {
@@ -93,6 +140,7 @@ final class ProfileSetupViewModel: ObservableObject {
                 !trim(volunteerPhone).isEmpty &&
                 !trim(volunteerEmail).isEmpty &&
                 !trim(volunteerLocation).isEmpty &&
+                volunteerPhoneError == nil &&
                 volunteerEmailError == nil &&
                 volunteerLocationError == nil
         } else {
@@ -100,6 +148,7 @@ final class ProfileSetupViewModel: ObservableObject {
                 !trim(organizationPhone).isEmpty &&
                 !trim(organizationEmail).isEmpty &&
                 !trim(organizationLocation).isEmpty &&
+                organizationPhoneError == nil &&
                 organizationEmailError == nil &&
                 organizationLocationError == nil
         }
@@ -108,6 +157,40 @@ final class ProfileSetupViewModel: ObservableObject {
     func setAvatar(_ image: UIImage) {
         avatarImage = image
         avatarData = image.jpegData(compressionQuality: 0.82)
+    }
+
+    func setVolunteerLocalPhoneNumber(_ value: String) {
+        volunteerPhone = phoneValue(
+            fromLocalInput: value,
+            country: selectedVolunteerPhoneCountry,
+            currentPhone: volunteerPhone
+        )
+    }
+
+    func setOrganizationLocalPhoneNumber(_ value: String) {
+        organizationPhone = phoneValue(
+            fromLocalInput: value,
+            country: selectedOrganizationPhoneCountry,
+            currentPhone: organizationPhone
+        )
+    }
+
+    func selectVolunteerPhoneCountry(_ country: PhoneCountry) {
+        volunteerPhone = phoneValueAfterCountryChange(
+            to: country,
+            currentPhone: volunteerPhone,
+            currentCountry: selectedVolunteerPhoneCountry
+        )
+        selectedVolunteerPhoneCountry = country
+    }
+
+    func selectOrganizationPhoneCountry(_ country: PhoneCountry) {
+        organizationPhone = phoneValueAfterCountryChange(
+            to: country,
+            currentPhone: organizationPhone,
+            currentCountry: selectedOrganizationPhoneCountry
+        )
+        selectedOrganizationPhoneCountry = country
     }
 
     func submit() async {
@@ -143,6 +226,9 @@ final class ProfileSetupViewModel: ObservableObject {
             guard let location = splitLocation(volunteerLocation) else {
                 throw ViewModelError.invalidLocation
             }
+            guard let phone = e164Number(from: volunteerPhone, country: selectedVolunteerPhoneCountry) else {
+                throw ViewModelError.invalidPhone
+            }
 
             return ProfileUpsertRequest(
                 type: selectedType.apiValue,
@@ -150,7 +236,7 @@ final class ProfileSetupViewModel: ObservableObject {
                 firstName: trim(firstName),
                 lastName: trim(lastName),
                 organizationName: nil,
-                phone: trim(volunteerPhone),
+                phone: phone,
                 email: trim(volunteerEmail).lowercased(),
                 city: location.city,
                 country: location.country,
@@ -161,6 +247,9 @@ final class ProfileSetupViewModel: ObservableObject {
             guard let location = splitLocation(organizationLocation) else {
                 throw ViewModelError.invalidLocation
             }
+            guard let phone = e164Number(from: organizationPhone, country: selectedOrganizationPhoneCountry) else {
+                throw ViewModelError.invalidPhone
+            }
 
             return ProfileUpsertRequest(
                 type: selectedType.apiValue,
@@ -168,7 +257,7 @@ final class ProfileSetupViewModel: ObservableObject {
                 firstName: nil,
                 lastName: nil,
                 organizationName: trim(organizationName),
-                phone: trim(organizationPhone),
+                phone: phone,
                 email: trim(organizationEmail).lowercased(),
                 city: location.city,
                 country: location.country,
@@ -184,6 +273,24 @@ final class ProfileSetupViewModel: ObservableObject {
         let regex = #"^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
         let valid = NSPredicate(format: "SELF MATCHES %@", regex).evaluate(with: email)
         return valid ? nil : "Введите корректную почту"
+    }
+
+    private func validatePhone(_ value: String, country: PhoneCountry) -> String? {
+        let digits = localDigits(from: value, fallbackCountry: country)
+
+        if digits.isEmpty {
+            return nil
+        }
+
+        if digits.count < country.localNumberLength {
+            return "Номер слишком короткий"
+        }
+
+        if digits.count > country.localNumberLength {
+            return "Введите корректный номер для выбранной страны"
+        }
+
+        return nil
     }
 
     private func validateLocation(_ value: String) -> String? {
@@ -204,15 +311,71 @@ final class ProfileSetupViewModel: ObservableObject {
     private func trim(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    private func country(matching phone: String) -> PhoneCountry? {
+        phoneCountries
+            .sorted { $0.code.count > $1.code.count }
+            .first { phone.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix($0.code) }
+    }
+
+    private func localDigits(from phone: String, fallbackCountry: PhoneCountry? = nil) -> String {
+        var trimmed = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let country = country(matching: trimmed) ?? fallbackCountry
+
+        if let country, trimmed.hasPrefix(country.code) {
+            trimmed.removeFirst(country.code.count)
+        }
+
+        return trimmed.filter(\.isNumber)
+    }
+
+    private func phoneValue(
+        fromLocalInput value: String,
+        country: PhoneCountry,
+        currentPhone: String
+    ) -> String {
+        let digits = value.filter(\.isNumber)
+        guard digits.count <= country.localNumberLength else {
+            return currentPhone
+        }
+
+        return digits.isEmpty ? "" : "\(country.code)\(digits)"
+    }
+
+    private func phoneValueAfterCountryChange(
+        to country: PhoneCountry,
+        currentPhone: String,
+        currentCountry: PhoneCountry
+    ) -> String {
+        let digits = localDigits(from: currentPhone, fallbackCountry: currentCountry)
+        guard !digits.isEmpty, digits.count <= country.localNumberLength else {
+            return ""
+        }
+
+        return "\(country.code)\(digits)"
+    }
+
+    private func e164Number(localDigits: String, country: PhoneCountry) -> String? {
+        guard localDigits.count == country.localNumberLength else { return nil }
+        return "\(country.code)\(localDigits)"
+    }
+
+    private func e164Number(from phone: String, country: PhoneCountry) -> String? {
+        let digits = localDigits(from: phone, fallbackCountry: country)
+        return e164Number(localDigits: digits, country: country)
+    }
 }
 
 enum ViewModelError: LocalizedError {
     case invalidLocation
+    case invalidPhone
 
     var errorDescription: String? {
         switch self {
         case .invalidLocation:
             return "Введите местонахождение в формате: Город, Страна"
+        case .invalidPhone:
+            return "Введите корректный номер для выбранной страны"
         }
     }
 }

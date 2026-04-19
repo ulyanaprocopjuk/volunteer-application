@@ -93,7 +93,17 @@ struct ProfileSetupView: View {
         VStack(alignment: .leading, spacing: 22) {
             LabeledInputField(title: "Имя", text: $viewModel.firstName, placeholder: "Введите имя")
             LabeledInputField(title: "Фамилия", text: $viewModel.lastName, placeholder: "Введите фамилию")
-            LabeledInputField(title: "Номер телефона", text: $viewModel.volunteerPhone, placeholder: "Введите номер телефона", keyboardType: .phonePad)
+            LabeledPhoneField(
+                title: "Номер телефона",
+                localNumber: Binding(
+                    get: { viewModel.volunteerLocalPhoneNumber },
+                    set: { viewModel.setVolunteerLocalPhoneNumber($0) }
+                ),
+                selectedCountry: viewModel.selectedVolunteerPhoneCountry,
+                countries: viewModel.phoneCountries,
+                error: viewModel.volunteerPhoneError,
+                onSelectCountry: { viewModel.selectVolunteerPhoneCountry($0) }
+            )
             LabeledInputField(title: "Электронная почта", text: $viewModel.volunteerEmail, placeholder: "Введите электронную почту", keyboardType: .emailAddress, autocapitalization: .never, error: viewModel.volunteerEmailError)
             LabeledInputField(title: "Местонахождение", text: $viewModel.volunteerLocation, placeholder: "Минск, Беларусь", error: viewModel.volunteerLocationError)
             LabeledMultiSelectField(title: "Навыки", selectedValues: $viewModel.selectedSkills, options: viewModel.skills, placeholder: "Выберите навыки")
@@ -104,7 +114,17 @@ struct ProfileSetupView: View {
     private var organizationFields: some View {
         VStack(alignment: .leading, spacing: 22) {
             LabeledInputField(title: "Название организации", text: $viewModel.organizationName, placeholder: "Введите название организации")
-            LabeledInputField(title: "Телефон", text: $viewModel.organizationPhone, placeholder: "Введите номер телефона", keyboardType: .phonePad)
+            LabeledPhoneField(
+                title: "Телефон",
+                localNumber: Binding(
+                    get: { viewModel.organizationLocalPhoneNumber },
+                    set: { viewModel.setOrganizationLocalPhoneNumber($0) }
+                ),
+                selectedCountry: viewModel.selectedOrganizationPhoneCountry,
+                countries: viewModel.phoneCountries,
+                error: viewModel.organizationPhoneError,
+                onSelectCountry: { viewModel.selectOrganizationPhoneCountry($0) }
+            )
             LabeledInputField(title: "Электронная почта", text: $viewModel.organizationEmail, placeholder: "Введите электронную почту", keyboardType: .emailAddress, autocapitalization: .never, error: viewModel.organizationEmailError)
             LabeledInputField(title: "Местонахождение", text: $viewModel.organizationLocation, placeholder: "Минск, Беларусь", error: viewModel.organizationLocationError)
             LabeledMultilineField(title: "О нас", text: $viewModel.aboutOrganization, placeholder: "Расскажите об организации")
