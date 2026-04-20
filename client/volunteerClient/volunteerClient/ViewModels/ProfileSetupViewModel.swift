@@ -52,6 +52,8 @@ final class ProfileSetupViewModel: ObservableObject {
         let selectedVolunteerPhoneCountry: PhoneCountry
         let volunteerEmail: String
         let volunteerLocation: String
+        let selectedVolunteerCountry: String
+        let volunteerCity: String
         let selectedSkills: Set<String>
         let aboutMe: String
         let organizationName: String
@@ -59,6 +61,8 @@ final class ProfileSetupViewModel: ObservableObject {
         let selectedOrganizationPhoneCountry: PhoneCountry
         let organizationEmail: String
         let organizationLocation: String
+        let selectedOrganizationCountry: String
+        let organizationCity: String
         let aboutOrganization: String
     }
 
@@ -73,6 +77,8 @@ final class ProfileSetupViewModel: ObservableObject {
     @Published var selectedVolunteerPhoneCountry = PhoneCountry.cisCountries[0]
     @Published var volunteerEmail = ""
     @Published var volunteerLocation = ""
+    @Published var selectedVolunteerCountry = CityDirectory.defaultCountry
+    @Published var volunteerCity = ""
     @Published var selectedSkills: Set<String> = []
     @Published var aboutMe = ""
 
@@ -81,6 +87,8 @@ final class ProfileSetupViewModel: ObservableObject {
     @Published var selectedOrganizationPhoneCountry = PhoneCountry.cisCountries[0]
     @Published var organizationEmail = ""
     @Published var organizationLocation = ""
+    @Published var selectedOrganizationCountry = CityDirectory.defaultCountry
+    @Published var organizationCity = ""
     @Published var aboutOrganization = ""
 
     @Published var isLoading = false
@@ -126,6 +134,18 @@ final class ProfileSetupViewModel: ObservableObject {
         PhoneCountry.cisCountries
     }
 
+    var locationCountries: [CityCountry] {
+        CityDirectory.countries
+    }
+
+    var volunteerCityOptions: [String] {
+        CityDirectory.cities(for: selectedVolunteerCountry)
+    }
+
+    var organizationCityOptions: [String] {
+        CityDirectory.cities(for: selectedOrganizationCountry)
+    }
+
     var volunteerLocalPhoneNumber: String {
         localDigits(from: volunteerPhone, fallbackCountry: selectedVolunteerPhoneCountry)
     }
@@ -151,11 +171,11 @@ final class ProfileSetupViewModel: ObservableObject {
     }
 
     var volunteerLocationError: String? {
-        validateLocation(volunteerLocation)
+        validateLocation(city: volunteerCity, country: selectedVolunteerCountry)
     }
 
     var organizationLocationError: String? {
-        validateLocation(organizationLocation)
+        validateLocation(city: organizationCity, country: selectedOrganizationCountry)
     }
 
     var canSubmit: Bool {
@@ -164,7 +184,8 @@ final class ProfileSetupViewModel: ObservableObject {
                 !trim(lastName).isEmpty &&
                 !trim(volunteerPhone).isEmpty &&
                 !trim(volunteerEmail).isEmpty &&
-                !trim(volunteerLocation).isEmpty &&
+                !trim(selectedVolunteerCountry).isEmpty &&
+                !trim(volunteerCity).isEmpty &&
                 volunteerPhoneError == nil &&
                 volunteerEmailError == nil &&
                 volunteerLocationError == nil
@@ -172,7 +193,8 @@ final class ProfileSetupViewModel: ObservableObject {
             return !trim(organizationName).isEmpty &&
                 !trim(organizationPhone).isEmpty &&
                 !trim(organizationEmail).isEmpty &&
-                !trim(organizationLocation).isEmpty &&
+                !trim(selectedOrganizationCountry).isEmpty &&
+                !trim(organizationCity).isEmpty &&
                 organizationPhoneError == nil &&
                 organizationEmailError == nil &&
                 organizationLocationError == nil
@@ -219,6 +241,30 @@ final class ProfileSetupViewModel: ObservableObject {
         selectedOrganizationPhoneCountry = country
     }
 
+    func selectVolunteerLocationCountry(_ country: String) {
+        guard selectedVolunteerCountry != country else { return }
+        selectedVolunteerCountry = country
+        volunteerCity = ""
+        volunteerLocation = ""
+    }
+
+    func selectOrganizationLocationCountry(_ country: String) {
+        guard selectedOrganizationCountry != country else { return }
+        selectedOrganizationCountry = country
+        organizationCity = ""
+        organizationLocation = ""
+    }
+
+    func setVolunteerCity(_ city: String) {
+        volunteerCity = city
+        volunteerLocation = locationValue(city: city, country: selectedVolunteerCountry)
+    }
+
+    func setOrganizationCity(_ city: String) {
+        organizationCity = city
+        organizationLocation = locationValue(city: city, country: selectedOrganizationCountry)
+    }
+
     func makeProfileSnapshot() -> ProfileSnapshot {
         ProfileSnapshot(
             selectedType: selectedType,
@@ -231,6 +277,8 @@ final class ProfileSetupViewModel: ObservableObject {
             selectedVolunteerPhoneCountry: selectedVolunteerPhoneCountry,
             volunteerEmail: volunteerEmail,
             volunteerLocation: volunteerLocation,
+            selectedVolunteerCountry: selectedVolunteerCountry,
+            volunteerCity: volunteerCity,
             selectedSkills: selectedSkills,
             aboutMe: aboutMe,
             organizationName: organizationName,
@@ -238,6 +286,8 @@ final class ProfileSetupViewModel: ObservableObject {
             selectedOrganizationPhoneCountry: selectedOrganizationPhoneCountry,
             organizationEmail: organizationEmail,
             organizationLocation: organizationLocation,
+            selectedOrganizationCountry: selectedOrganizationCountry,
+            organizationCity: organizationCity,
             aboutOrganization: aboutOrganization
         )
     }
@@ -253,6 +303,8 @@ final class ProfileSetupViewModel: ObservableObject {
         selectedVolunteerPhoneCountry = snapshot.selectedVolunteerPhoneCountry
         volunteerEmail = snapshot.volunteerEmail
         volunteerLocation = snapshot.volunteerLocation
+        selectedVolunteerCountry = snapshot.selectedVolunteerCountry
+        volunteerCity = snapshot.volunteerCity
         selectedSkills = snapshot.selectedSkills
         aboutMe = snapshot.aboutMe
         organizationName = snapshot.organizationName
@@ -260,6 +312,8 @@ final class ProfileSetupViewModel: ObservableObject {
         selectedOrganizationPhoneCountry = snapshot.selectedOrganizationPhoneCountry
         organizationEmail = snapshot.organizationEmail
         organizationLocation = snapshot.organizationLocation
+        selectedOrganizationCountry = snapshot.selectedOrganizationCountry
+        organizationCity = snapshot.organizationCity
         aboutOrganization = snapshot.aboutOrganization
     }
 
@@ -330,7 +384,7 @@ final class ProfileSetupViewModel: ObservableObject {
 
     private func buildRequest(avatarURL: String?) throws -> ProfileUpsertRequest {
         if isVolunteer {
-            guard let location = splitLocation(volunteerLocation) else {
+            guard let location = locationParts(city: volunteerCity, country: selectedVolunteerCountry) else {
                 throw ViewModelError.invalidLocation
             }
             guard let phone = e164Number(from: volunteerPhone, country: selectedVolunteerPhoneCountry) else {
@@ -351,7 +405,7 @@ final class ProfileSetupViewModel: ObservableObject {
                 about: trim(aboutMe).nilIfEmpty
             )
         } else {
-            guard let location = splitLocation(organizationLocation) else {
+            guard let location = locationParts(city: organizationCity, country: selectedOrganizationCountry) else {
                 throw ViewModelError.invalidLocation
             }
             guard let phone = e164Number(from: organizationPhone, country: selectedOrganizationPhoneCountry) else {
@@ -382,7 +436,9 @@ final class ProfileSetupViewModel: ObservableObject {
 
         let phone = profile.phone ?? ""
         let email = profile.email ?? ""
-        let location = locationValue(city: profile.city, country: profile.country)
+        let city = profile.city ?? ""
+        let profileCountry = trim(profile.country ?? "").nilIfEmpty ?? CityDirectory.defaultCountry
+        let location = locationValue(city: city, country: profileCountry)
         let about = profile.about ?? ""
 
         switch selectedType {
@@ -392,6 +448,8 @@ final class ProfileSetupViewModel: ObservableObject {
             volunteerPhone = phone
             volunteerEmail = email
             volunteerLocation = location
+            selectedVolunteerCountry = profileCountry
+            volunteerCity = city
             selectedSkills = Set(profile.skills ?? [])
             aboutMe = about
 
@@ -403,6 +461,8 @@ final class ProfileSetupViewModel: ObservableObject {
             organizationPhone = ""
             organizationEmail = ""
             organizationLocation = ""
+            selectedOrganizationCountry = CityDirectory.defaultCountry
+            organizationCity = ""
             aboutOrganization = ""
 
         case .organization:
@@ -410,6 +470,8 @@ final class ProfileSetupViewModel: ObservableObject {
             organizationPhone = phone
             organizationEmail = email
             organizationLocation = location
+            selectedOrganizationCountry = profileCountry
+            organizationCity = city
             aboutOrganization = about
 
             if let country = country(matching: phone) {
@@ -421,6 +483,8 @@ final class ProfileSetupViewModel: ObservableObject {
             volunteerPhone = ""
             volunteerEmail = ""
             volunteerLocation = ""
+            selectedVolunteerCountry = CityDirectory.defaultCountry
+            volunteerCity = ""
             selectedSkills = []
             aboutMe = ""
         }
@@ -471,19 +535,31 @@ final class ProfileSetupViewModel: ObservableObject {
         return nil
     }
 
-    private func validateLocation(_ value: String) -> String? {
-        let value = trim(value)
-        guard !value.isEmpty else { return nil }
-        return splitLocation(value) == nil ? "Введите в формате: Город, Страна" : nil
+    private func validateLocation(city: String, country: String) -> String? {
+        let city = trim(city)
+        let country = trim(country)
+
+        if city.isEmpty && country.isEmpty {
+            return nil
+        }
+
+        if country.isEmpty {
+            return "Выберите страну"
+        }
+
+        if city.isEmpty {
+            return nil
+        }
+
+        return nil
     }
 
-    private func splitLocation(_ value: String) -> (city: String, country: String)? {
-        let parts = value
-            .split(separator: ",", omittingEmptySubsequences: false)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+    private func locationParts(city: String, country: String) -> (city: String, country: String)? {
+        let city = trim(city)
+        let country = trim(country)
 
-        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return nil }
-        return (parts[0], parts[1])
+        guard !city.isEmpty, !country.isEmpty else { return nil }
+        return (city, country)
     }
 
     private func trim(_ value: String) -> String {
@@ -551,7 +627,7 @@ enum ViewModelError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidLocation:
-            return "Введите местонахождение в формате: Город, Страна"
+            return "Выберите страну и введите город"
         case .invalidPhone:
             return "Введите корректный номер для выбранной страны"
         }

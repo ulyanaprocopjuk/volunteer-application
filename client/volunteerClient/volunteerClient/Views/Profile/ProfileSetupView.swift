@@ -102,7 +102,20 @@ struct ProfileSetupView: View {
                 onSelectCountry: { viewModel.selectVolunteerPhoneCountry($0) }
             )
             LabeledInputField(title: "Электронная почта", text: $viewModel.volunteerEmail, placeholder: "Введите электронную почту", keyboardType: .emailAddress, autocapitalization: .never, error: viewModel.volunteerEmailError)
-            LabeledInputField(title: "Местонахождение", text: $viewModel.volunteerLocation, placeholder: "Минск, Беларусь", error: viewModel.volunteerLocationError)
+            LabeledLocationField(
+                title: "Местонахождение",
+                country: Binding(
+                    get: { viewModel.selectedVolunteerCountry },
+                    set: { viewModel.selectVolunteerLocationCountry($0) }
+                ),
+                city: Binding(
+                    get: { viewModel.volunteerCity },
+                    set: { viewModel.setVolunteerCity($0) }
+                ),
+                countries: viewModel.locationCountries,
+                error: viewModel.volunteerLocationError,
+                onSelectCountry: { viewModel.selectVolunteerLocationCountry($0) }
+            )
             LabeledMultiSelectField(title: "Навыки", selectedValues: $viewModel.selectedSkills, options: viewModel.skills, placeholder: "Выберите навыки")
             LabeledMultilineField(title: "Обо мне", text: $viewModel.aboutMe, placeholder: "Расскажите о себе")
         }
@@ -123,7 +136,20 @@ struct ProfileSetupView: View {
                 onSelectCountry: { viewModel.selectOrganizationPhoneCountry($0) }
             )
             LabeledInputField(title: "Электронная почта", text: $viewModel.organizationEmail, placeholder: "Введите электронную почту", keyboardType: .emailAddress, autocapitalization: .never, error: viewModel.organizationEmailError)
-            LabeledInputField(title: "Местонахождение", text: $viewModel.organizationLocation, placeholder: "Минск, Беларусь", error: viewModel.organizationLocationError)
+            LabeledLocationField(
+                title: "Местонахождение",
+                country: Binding(
+                    get: { viewModel.selectedOrganizationCountry },
+                    set: { viewModel.selectOrganizationLocationCountry($0) }
+                ),
+                city: Binding(
+                    get: { viewModel.organizationCity },
+                    set: { viewModel.setOrganizationCity($0) }
+                ),
+                countries: viewModel.locationCountries,
+                error: viewModel.organizationLocationError,
+                onSelectCountry: { viewModel.selectOrganizationLocationCountry($0) }
+            )
             LabeledMultilineField(title: "О нас", text: $viewModel.aboutOrganization, placeholder: "Расскажите об организации")
         }
     }

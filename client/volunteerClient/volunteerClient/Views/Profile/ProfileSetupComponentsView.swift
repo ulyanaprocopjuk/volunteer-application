@@ -155,6 +155,219 @@ struct PhoneCountrySelectionSheet: View {
     }
 }
 
+import SwiftUI
+
+struct LabeledLocationField: View {
+    let title: String
+    @Binding var country: String
+    @Binding var city: String
+    let countries: [CityCountry]
+    let error: String?
+    let onSelectCountry: (String) -> Void
+
+    @State private var isLocationSheetPresented = false
+
+    private var displayText: String {
+        let trimmedCountry = country.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCity = city.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmedCountry.isEmpty && !trimmedCity.isEmpty {
+            return "\(trimmedCountry), \(trimmedCity)"
+        } else {
+            return "Выберите страну и город"
+        }
+    }
+
+    private var isPlaceholder: Bool {
+        city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var countryBinding: Binding<String> {
+        Binding(
+            get: { country },
+            set: { newValue in
+                onSelectCountry(newValue)
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 17, weight: .regular, design: .serif))
+                .padding(.leading, 8)
+
+            Button {
+                isLocationSheetPresented = true
+            } label: {
+                HStack(spacing: 12) {
+                    Text(displayText)
+                        .font(.system(size: 15))
+                        .foregroundColor(isPlaceholder ? .gray : .black)
+                        .multilineTextAlignment(.leading)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.gray)
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 58)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .overlay(
+                Capsule()
+                    .stroke(error == nil ? Color.gray.opacity(0.5) : Color.red, lineWidth: 1)
+            )
+
+            if let error {
+                Text(error)
+                    .font(.system(size: 13))
+                    .foregroundColor(.red)
+                    .padding(.leading, 8)
+            }
+        }
+        .sheet(isPresented: $isLocationSheetPresented) {
+            LocationSelectionSheet(
+                country: countryBinding,
+                city: $city,
+                countries: countries
+            )
+        }
+    }
+}
+
+struct LocationSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var country: String
+    @Binding var city: String
+    let countries: [CityCountry]
+
+    @State private var searchText = ""
+
+    private var currentCountryCities: [String] {
+        countries.first(where: { $0.country == country })?.cities ?? []
+    }
+
+    private var filteredCities: [String] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !query.isEmpty else {
+            return currentCountryCities
+        }
+
+        return currentCountryCities.filter {
+            $0.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 14) {
+                Menu {
+                    ForEach(countries) { item in
+                        Button(item.country) {
+                            guard country != item.country else { return }
+                            country = item.country
+                            city = ""
+                            searchText = ""
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(country)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.black)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 50)
+                    .background(Color(.systemGray6))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+
+                    TextField("Найти город", text: $searchText)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(true)
+                        .font(.system(size: 15))
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 50)
+                .background(Color(.systemGray6))
+                .clipShape(Capsule())
+                .padding(.horizontal, 16)
+
+                if filteredCities.isEmpty {
+                    Spacer()
+
+                    VStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 22))
+                            .foregroundColor(.gray)
+
+                        Text("Город не найден")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.black)
+
+                        Text("Попробуйте изменить запрос")
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
+                    }
+
+                    Spacer()
+                } else {
+                    List(filteredCities, id: \.self) { item in
+                        Button {
+                            city = item
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Text(item)
+                                    .foregroundColor(.black)
+
+                                Spacer()
+
+                                if item == city {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .padding(.top, 8)
+            .navigationTitle("Местонахождение")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Закрыть") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+
 struct LabeledMultilineField: View {
     let title: String
     @Binding var text: String

@@ -135,11 +135,19 @@ struct ProfileEditView: View {
                 autocapitalization: .never,
                 error: viewModel.volunteerEmailError
             )
-            LabeledInputField(
+            LabeledLocationField(
                 title: "Местонахождение",
-                text: $viewModel.volunteerLocation,
-                placeholder: "Минск, Беларусь",
-                error: viewModel.volunteerLocationError
+                country: Binding(
+                    get: { viewModel.selectedVolunteerCountry },
+                    set: { viewModel.selectVolunteerLocationCountry($0) }
+                ),
+                city: Binding(
+                    get: { viewModel.volunteerCity },
+                    set: { viewModel.setVolunteerCity($0) }
+                ),
+                countries: viewModel.locationCountries,
+                error: viewModel.volunteerLocationError,
+                onSelectCountry: { viewModel.selectVolunteerLocationCountry($0) }
             )
             LabeledMultiSelectField(
                 title: "Навыки",
@@ -181,11 +189,19 @@ struct ProfileEditView: View {
                 autocapitalization: .never,
                 error: viewModel.organizationEmailError
             )
-            LabeledInputField(
+            LabeledLocationField(
                 title: "Местонахождение",
-                text: $viewModel.organizationLocation,
-                placeholder: "Минск, Беларусь",
-                error: viewModel.organizationLocationError
+                country: Binding(
+                    get: { viewModel.selectedOrganizationCountry },
+                    set: { viewModel.selectOrganizationLocationCountry($0) }
+                ),
+                city: Binding(
+                    get: { viewModel.organizationCity },
+                    set: { viewModel.setOrganizationCity($0) }
+                ),
+                countries: viewModel.locationCountries,
+                error: viewModel.organizationLocationError,
+                onSelectCountry: { viewModel.selectOrganizationLocationCountry($0) }
             )
             LabeledMultilineField(
                 title: "О нас",
