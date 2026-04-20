@@ -2,7 +2,7 @@ import Foundation
 
 protocol ProfileAPIProtocol {
     func uploadAvatar(data: Data, token: String?) async throws -> String
-    func saveProfile(_ requestModel: ProfileUpsertRequest, token: String?) async throws
+    func saveProfile(_ requestModel: ProfileUpsertRequest, token: String?) async throws 
     func fetchMyProfile(token: String?) async throws -> ProfileResponse
 }
 

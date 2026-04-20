@@ -173,7 +173,7 @@ struct ProfileView: View {
             ReadOnlyField(title: "Номер телефона", value: model.volunteerPhone)
             ReadOnlyField(title: "Электронная почта", value: model.volunteerEmail)
             ReadOnlyField(title: "Местонахождение", value: model.volunteerLocation)
-//            ReadOnlySkillsField(title: "Навыки", values: model.selectedSkillsArray)
+            ReadOnlySkillsField(title: "Навыки", values: Array(model.selectedSkills))
             ReadOnlyMultilineField(title: "Обо мне", value: model.aboutMe)
         }
     }
