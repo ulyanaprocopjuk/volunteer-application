@@ -19,7 +19,7 @@ struct BottomTabBar: View {
                 tabButton(.events, icon: "calendar")
             }
             .padding(.horizontal, 30)
-            .frame(height: 70)
+            .frame(height: TabBarLayout.height)
             .background(Color.white)
         }
         .ignoresSafeArea(edges: .bottom)

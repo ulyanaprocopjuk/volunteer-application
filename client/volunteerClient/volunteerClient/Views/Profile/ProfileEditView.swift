@@ -21,12 +21,31 @@ struct ProfileEditView: View {
     }
 
     var body: some View {
+        mainContent
+            .appNavigationStack("Редактирование") {
+                ToolbarItem(placement: .topBarLeading) {
+                    backButton
+                }
+            }
+            .task {
+                await prepareIfNeeded()
+            }
+            .task(id: selectedPhotoItem) {
+                await loadPhoto()
+            }
+            .alert("Сообщение", isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { _ in viewModel.errorMessage = nil }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(viewModel.errorMessage ?? "")
+            }
+    }
+
+    private var mainContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
-                headerSection
-                    .padding(.top, 20)
-                    .padding(.horizontal, 24)
-
                 avatarSection
                     .padding(.top, 24)
 
@@ -72,52 +91,25 @@ struct ProfileEditView: View {
             .padding(.bottom, 18)
         }
         .background(Color(.systemGray6).ignoresSafeArea())
-        .task {
-            await prepareIfNeeded()
-        }
-        .task(id: selectedPhotoItem) {
-            await loadPhoto()
-        }
-        .alert("Сообщение", isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { _ in viewModel.errorMessage = nil }
-        )) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
     }
 
-    private var headerSection: some View {
-        HStack {
-            Button {
-                if let originalSnapshot {
-                    viewModel.restoreProfileSnapshot(originalSnapshot)
-                }
-                onBack()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.black.opacity(0.85))
-                    .frame(width: 42, height: 42)
-                    .background(
-                        Circle().fill(Color.white.opacity(0.96))
-                    )
-                    .shadow(color: .black.opacity(0.07), radius: 10, x: 0, y: 4)
+    private var backButton: some View {
+        Button {
+            if let originalSnapshot {
+                viewModel.restoreProfileSnapshot(originalSnapshot)
             }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text("Редактирование")
-                .font(.system(size: 26, weight: .semibold, design: .serif))
+            onBack()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.black.opacity(0.85))
-
-            Spacer()
-
-            Color.clear
-                .frame(width: 42, height: 42)
+                .frame(width: 36, height: 36)
+                .background(
+                    Circle().fill(Color.white.opacity(0.96))
+                )
+                .shadow(color: .black.opacity(0.07), radius: 10, x: 0, y: 4)
         }
+        .buttonStyle(.plain)
     }
 
     private var volunteerFields: some View {

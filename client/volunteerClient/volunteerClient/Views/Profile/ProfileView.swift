@@ -12,6 +12,11 @@ struct ProfileView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             mainContent
+                .appNavigationStack("Профиль") {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        settingsButton
+                    }
+                }
                 .blur(radius: showSettings ? 2 : 0)
                 .scaleEffect(showSettings ? 0.992 : 1)
                 .animation(.spring(response: 0.32, dampingFraction: 0.9), value: showSettings)
@@ -60,12 +65,8 @@ struct ProfileView: View {
     private var mainContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
-                headerSection
-                    .padding(.top, 20)
-                    .padding(.horizontal, 24)
-
                 profileStatusView
-                    .padding(.top, 14)
+                    .padding(.top, 20)
                     .padding(.horizontal, 24)
 
                 avatarSection
@@ -89,34 +90,22 @@ struct ProfileView: View {
         }
     }
 
-    private var headerSection: some View {
-        HStack {
-            Color.clear
-                .frame(width: 42, height: 42)
-
-            Spacer()
-
-            Text("Профиль")
-                .font(.system(size: 26, weight: .semibold, design: .serif))
-                .foregroundColor(.black.opacity(0.85))
-
-            Spacer()
-
-            Button {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
-                    showSettings = true
-                }
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundColor(.black.opacity(0.82))
-                    .frame(width: 42, height: 42)
-                    .background(
-                        Circle().fill(Color.white.opacity(0.96))
-                    )
-                    .shadow(color: .black.opacity(0.07), radius: 10, x: 0, y: 4)
+    private var settingsButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                showSettings = true
             }
+        } label: {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.black.opacity(0.82))
+                .frame(width: 36, height: 36)
+                .background(
+                    Circle().fill(Color.white.opacity(0.96))
+                )
+                .shadow(color: .black.opacity(0.07), radius: 10, x: 0, y: 4)
         }
+        .buttonStyle(.plain)
     }
 
     private var avatarSection: some View {

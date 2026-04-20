@@ -70,10 +70,7 @@ struct ProfileSetupView: View {
             .padding(.bottom, 18)
         }
         .background(Color(.systemGray6).ignoresSafeArea())
-        .navigationTitle("Профиль")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color(.systemGray6), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .appNavigationTitle("Профиль")
         .task(id: selectedPhotoItem) {
             await loadPhoto()
         }
