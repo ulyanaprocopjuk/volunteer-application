@@ -13,6 +13,7 @@ struct HomePageView: View {
 
     @State private var selectedTab: HomeTab = .map
     @State private var isMenuPresented = false
+    @State private var isEditingProfile = false
 
     init(session: AppSession) {
         self.session = session
@@ -78,12 +79,27 @@ struct HomePageView: View {
     private var currentTabView: some View {
         switch selectedTab {
         case .profile:
-            ProfileView(
-                model: profileModel,
-                onLogout: {
-                    session.logout()
-                }
-            )
+            if isEditingProfile {
+                ProfileEditView(
+                    viewModel: profileModel,
+                    onBack: {
+                        isEditingProfile = false
+                    },
+                    onSave: {
+                        isEditingProfile = false
+                    }
+                )
+            } else {
+                ProfileView(
+                    model: profileModel,
+                    onEditProfile: {
+                        isEditingProfile = true
+                    },
+                    onLogout: {
+                        session.logout()
+                    }
+                )
+            }
 
         case .map:
             MapEventsView(

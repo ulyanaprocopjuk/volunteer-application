@@ -41,6 +41,27 @@ final class ProfileSetupViewModel: ObservableObject {
         ]
     }
 
+    struct ProfileSnapshot {
+        let selectedType: ProfileType
+        let avatarImage: UIImage?
+        let avatarURL: String?
+        let avatarData: Data?
+        let firstName: String
+        let lastName: String
+        let volunteerPhone: String
+        let selectedVolunteerPhoneCountry: PhoneCountry
+        let volunteerEmail: String
+        let volunteerLocation: String
+        let selectedSkills: Set<String>
+        let aboutMe: String
+        let organizationName: String
+        let organizationPhone: String
+        let selectedOrganizationPhoneCountry: PhoneCountry
+        let organizationEmail: String
+        let organizationLocation: String
+        let aboutOrganization: String
+    }
+
     @Published var selectedType: ProfileType = .volunteer
     @Published var avatarImage: UIImage?
     @Published var avatarURL: String?
@@ -198,29 +219,91 @@ final class ProfileSetupViewModel: ObservableObject {
         selectedOrganizationPhoneCountry = country
     }
 
+    func makeProfileSnapshot() -> ProfileSnapshot {
+        ProfileSnapshot(
+            selectedType: selectedType,
+            avatarImage: avatarImage,
+            avatarURL: avatarURL,
+            avatarData: avatarData,
+            firstName: firstName,
+            lastName: lastName,
+            volunteerPhone: volunteerPhone,
+            selectedVolunteerPhoneCountry: selectedVolunteerPhoneCountry,
+            volunteerEmail: volunteerEmail,
+            volunteerLocation: volunteerLocation,
+            selectedSkills: selectedSkills,
+            aboutMe: aboutMe,
+            organizationName: organizationName,
+            organizationPhone: organizationPhone,
+            selectedOrganizationPhoneCountry: selectedOrganizationPhoneCountry,
+            organizationEmail: organizationEmail,
+            organizationLocation: organizationLocation,
+            aboutOrganization: aboutOrganization
+        )
+    }
+
+    func restoreProfileSnapshot(_ snapshot: ProfileSnapshot) {
+        selectedType = snapshot.selectedType
+        avatarImage = snapshot.avatarImage
+        avatarURL = snapshot.avatarURL
+        avatarData = snapshot.avatarData
+        firstName = snapshot.firstName
+        lastName = snapshot.lastName
+        volunteerPhone = snapshot.volunteerPhone
+        selectedVolunteerPhoneCountry = snapshot.selectedVolunteerPhoneCountry
+        volunteerEmail = snapshot.volunteerEmail
+        volunteerLocation = snapshot.volunteerLocation
+        selectedSkills = snapshot.selectedSkills
+        aboutMe = snapshot.aboutMe
+        organizationName = snapshot.organizationName
+        organizationPhone = snapshot.organizationPhone
+        selectedOrganizationPhoneCountry = snapshot.selectedOrganizationPhoneCountry
+        organizationEmail = snapshot.organizationEmail
+        organizationLocation = snapshot.organizationLocation
+        aboutOrganization = snapshot.aboutOrganization
+    }
+
     func submit() async {
+        let saved = await saveProfileChanges(reloadAfterSave: false)
+        if saved {
+            session.completeProfileSetup()
+        }
+    }
+
+    @discardableResult
+    func saveProfileChanges(reloadAfterSave: Bool = true) async -> Bool {
         guard canSubmit else {
             errorMessage = "Проверьте поля формы"
-            return
+            return false
         }
 
+        errorMessage = nil
         isLoading = true
         defer { isLoading = false }
 
         do {
             let token = try await session.validAccessToken()
-            var avatarURL: String?
+            var savedAvatarURL = avatarURL
+
             if let avatarData {
-                avatarURL = try await api.uploadAvatar(data: avatarData, token: token)
+                savedAvatarURL = try await api.uploadAvatar(data: avatarData, token: token)
             }
 
-            let request = try buildRequest(avatarURL: avatarURL)
+            let request = try buildRequest(avatarURL: savedAvatarURL)
             try await api.saveProfile(request, token: token)
-            self.avatarURL = avatarURL
+
+            avatarURL = savedAvatarURL
+            self.avatarData = nil
             hasLoadedProfile = false
-            session.completeProfileSetup()
+
+            if reloadAfterSave {
+                await loadMyProfile()
+            }
+
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
