@@ -17,9 +17,7 @@ struct RootView: View {
                     ProfileSetupScreen(session: session)
                 }
             case .main:
-                NavigationStack {
-                    MainPlaceholderView(onLogout: session.logout)
-                }
+                HomePageView(session: session)
             }
         }
     }
@@ -46,23 +44,5 @@ private struct ProfileSetupScreen: View {
 
     var body: some View {
         ProfileSetupView(viewModel: viewModel)
-    }
-}
-
-private struct MainPlaceholderView: View {
-    let onLogout: () -> Void
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Главный экран")
-                .font(.title2.bold())
-
-            Text("Пока не реализован")
-                .foregroundStyle(.secondary)
-
-            Button("Выйти", action: onLogout)
-                .buttonStyle(.borderedProminent)
-        }
-        .padding()
     }
 }

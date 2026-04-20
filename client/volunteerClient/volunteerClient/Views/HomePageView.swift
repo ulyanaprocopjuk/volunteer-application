@@ -69,6 +69,9 @@ struct HomePageView: View {
         }
         .background(Color(.systemGray6).ignoresSafeArea())
         .animation(.easeInOut(duration: 0.22), value: isMenuPresented)
+        .task {
+            await profileModel.loadMyProfileIfNeeded()
+        }
     }
 
     @ViewBuilder

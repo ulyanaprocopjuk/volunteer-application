@@ -43,6 +43,7 @@ final class ProfileSetupViewModel: ObservableObject {
 
     @Published var selectedType: ProfileType = .volunteer
     @Published var avatarImage: UIImage?
+    @Published var avatarURL: String?
     private var avatarData: Data?
 
     @Published var firstName = ""
@@ -62,7 +63,9 @@ final class ProfileSetupViewModel: ObservableObject {
     @Published var aboutOrganization = ""
 
     @Published var isLoading = false
+    @Published var isProfileLoading = false
     @Published var errorMessage: String?
+    @Published var profileLoadError: String?
 
     let skills = [
         "Общение с людьми",
@@ -84,6 +87,7 @@ final class ProfileSetupViewModel: ObservableObject {
 
     private let api: ProfileAPIProtocol
     private unowned let session: AppSession
+    private var hasLoadedProfile = false
 
     init(
         session: AppSession,
@@ -156,6 +160,7 @@ final class ProfileSetupViewModel: ObservableObject {
 
     func setAvatar(_ image: UIImage) {
         avatarImage = image
+        avatarURL = nil
         avatarData = image.jpegData(compressionQuality: 0.82)
     }
 
@@ -199,15 +204,11 @@ final class ProfileSetupViewModel: ObservableObject {
             return
         }
 
-        guard let token = session.token, !token.isEmpty else {
-            errorMessage = "Пользователь не авторизован"
-            return
-        }
-
         isLoading = true
         defer { isLoading = false }
 
         do {
+            let token = try await session.validAccessToken()
             var avatarURL: String?
             if let avatarData {
                 avatarURL = try await api.uploadAvatar(data: avatarData, token: token)
@@ -215,9 +216,32 @@ final class ProfileSetupViewModel: ObservableObject {
 
             let request = try buildRequest(avatarURL: avatarURL)
             try await api.saveProfile(request, token: token)
+            self.avatarURL = avatarURL
+            hasLoadedProfile = false
             session.completeProfileSetup()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadMyProfileIfNeeded() async {
+        guard !hasLoadedProfile, !isProfileLoading else { return }
+        await loadMyProfile()
+    }
+
+    func loadMyProfile() async {
+        guard !isProfileLoading else { return }
+        isProfileLoading = true
+        profileLoadError = nil
+        defer { isProfileLoading = false }
+
+        do {
+            let token = try await session.validAccessToken()
+            let profile = try await api.fetchMyProfile(token: token)
+            applyProfile(profile)
+            hasLoadedProfile = true
+        } catch {
+            profileLoadError = error.localizedDescription
         }
     }
 
@@ -265,6 +289,77 @@ final class ProfileSetupViewModel: ObservableObject {
                 about: trim(aboutOrganization).nilIfEmpty
             )
         }
+    }
+
+    private func applyProfile(_ profile: ProfileResponse) {
+        selectedType = profileType(from: profile)
+        avatarImage = nil
+        avatarData = nil
+        avatarURL = profile.avatarURL
+
+        let phone = profile.phone ?? ""
+        let email = profile.email ?? ""
+        let location = locationValue(city: profile.city, country: profile.country)
+        let about = profile.about ?? ""
+
+        switch selectedType {
+        case .volunteer:
+            firstName = profile.firstName ?? ""
+            lastName = profile.lastName ?? ""
+            volunteerPhone = phone
+            volunteerEmail = email
+            volunteerLocation = location
+            selectedSkills = Set(profile.skills ?? [])
+            aboutMe = about
+
+            if let country = country(matching: phone) {
+                selectedVolunteerPhoneCountry = country
+            }
+
+            organizationName = ""
+            organizationPhone = ""
+            organizationEmail = ""
+            organizationLocation = ""
+            aboutOrganization = ""
+
+        case .organization:
+            organizationName = profile.organizationName ?? ""
+            organizationPhone = phone
+            organizationEmail = email
+            organizationLocation = location
+            aboutOrganization = about
+
+            if let country = country(matching: phone) {
+                selectedOrganizationPhoneCountry = country
+            }
+
+            firstName = ""
+            lastName = ""
+            volunteerPhone = ""
+            volunteerEmail = ""
+            volunteerLocation = ""
+            selectedSkills = []
+            aboutMe = ""
+        }
+    }
+
+    private func profileType(from profile: ProfileResponse) -> ProfileType {
+        switch profile.type {
+        case ProfileType.organization.apiValue, ProfileType.organization.rawValue:
+            return .organization
+        case ProfileType.volunteer.apiValue, ProfileType.volunteer.rawValue:
+            return .volunteer
+        default:
+            return profile.organizationName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                ? .organization
+                : .volunteer
+        }
+    }
+
+    private func locationValue(city: String?, country: String?) -> String {
+        [city, country]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+            .joined(separator: ", ")
     }
 
     private func validateEmail(_ value: String) -> String? {

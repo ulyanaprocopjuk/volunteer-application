@@ -64,6 +64,10 @@ struct ProfileView: View {
                     .padding(.top, 20)
                     .padding(.horizontal, 24)
 
+                profileStatusView
+                    .padding(.top, 14)
+                    .padding(.horizontal, 24)
+
                 avatarSection
                     .padding(.top, 24)
 
@@ -121,12 +125,108 @@ struct ProfileView: View {
                 .fill(Color(red: 231/255, green: 243/255, blue: 247/255))
                 .frame(width: 104, height: 104)
 
-            Image(systemName: model.isVolunteer ? "person.fill" : "building.2.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 40, height: 40)
-                .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+            avatarContent
         }
+        .frame(width: 104, height: 104)
+        .clipShape(Circle())
+    }
+
+    @ViewBuilder
+    private var profileStatusView: some View {
+        if model.isProfileLoading {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .tint(Color(red: 18/255, green: 162/255, blue: 231/255))
+
+                Text("Загружаем профиль...")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.gray)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        } else if let error = model.profileLoadError {
+            VStack(spacing: 10) {
+                Text("Не удалось загрузить профиль")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.black.opacity(0.84))
+
+                Text(error)
+                    .font(.system(size: 13))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    Task {
+                        await model.loadMyProfile()
+                    }
+                } label: {
+                    Text("Повторить")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color(red: 18/255, green: 162/255, blue: 231/255))
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var avatarContent: some View {
+        if let avatarImage = model.avatarImage {
+            Image(uiImage: avatarImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 104, height: 104)
+        } else if let avatarRemoteURL {
+            AsyncImage(url: avatarRemoteURL) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .tint(Color(red: 18/255, green: 162/255, blue: 231/255))
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 104, height: 104)
+                case .failure:
+                    avatarPlaceholder
+                @unknown default:
+                    avatarPlaceholder
+                }
+            }
+        } else {
+            avatarPlaceholder
+        }
+    }
+
+    private var avatarPlaceholder: some View {
+        Image(systemName: model.isVolunteer ? "person.fill" : "building.2.fill")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 40, height: 40)
+            .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+    }
+
+    private var avatarRemoteURL: URL? {
+        guard let avatarURL = model.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !avatarURL.isEmpty else {
+            return nil
+        }
+
+        if let url = URL(string: avatarURL), url.scheme != nil {
+            return url
+        }
+
+        guard let baseURL = URL(string: AppConfig.baseURLString) else {
+            return nil
+        }
+
+        let path = avatarURL.hasPrefix("/") ? String(avatarURL.dropFirst()) : avatarURL
+        return baseURL.appendingPathComponent(path)
     }
 
     private var pointsCard: some View {
