@@ -1,301 +1,400 @@
 import Foundation
-import CoreLocation
 import Combine
-
-struct EventDraft {
-    let title: String
-    let description: String
-    let locationAddress: String
-    let locationCoordinate: CLLocationCoordinate2D
-    let startAt: Date
-    let endDay: Date
-    let endAt: Date?
-    let durationMinutes: Int?
-    let volunteersCount: Int
-}
-
-struct SelectedLocation {
-    let address: String
-    let coordinate: CLLocationCoordinate2D
-}
+import CoreLocation
+import MapKit
 
 @MainActor
-final class EventFormViewModel: ObservableObject {
-    @Published var title: String = ""
-    @Published var descriptionText: String = ""
+final class EventViewModel: ObservableObject {
+    @Published var eventTitle = ""
+    @Published var eventDescription = ""
 
-    @Published var selectedLocation: SelectedLocation?
+    @Published var locationText = ""
+    @Published var selectedCoordinate: CLLocationCoordinate2D?
 
-    @Published var startDay: Date?
+    @Published var startDate: Date?
     @Published var startTime: Date?
 
-    @Published var endDay: Date?
+    @Published var endDate: Date?
     @Published var endTime: Date?
 
     @Published var volunteersCount: Int = 1
-    @Published var volunteersInput: String = "1"
+    @Published var volunteersManualInput: String = "1"
 
-    init(now: Date = Date()) {
-        let roundedNow = Self.roundToHour(now)
-        self.startDay = nil
-        self.startTime = nil
-        self.endDay = nil
-        self.endTime = nil
-        self.volunteersInput = "1"
-    }
+    @Published var isSubmitting = false
+    @Published var errorMessage: String?
+    @Published var successMessage: String?
 
     var todayStart: Date {
         Calendar.current.startOfDay(for: Date())
     }
 
-    var locationDisplayText: String {
-        selectedLocation?.address ?? ""
+    var canSubmit: Bool {
+        !trim(eventTitle).isEmpty &&
+        !trim(eventDescription).isEmpty &&
+        selectedCoordinate != nil &&
+        !trim(locationText).isEmpty &&
+        startDate != nil &&
+        startTime != nil &&
+        !trim(volunteersManualInput).isEmpty &&
+        volunteersInputIsValid &&
+        endError == nil
     }
 
-    var formattedStart: String {
-        guard let startAt else { return "" }
-        return DateFormatters.dateTime.string(from: startAt)
+    var locationPlaceholder: String {
+        "Выберите местоположение"
     }
 
-    var formattedEnd: String {
-        guard let endDay else { return "" }
+    var formattedStartText: String {
+        guard let startDate, let startTime else {
+            return "Выберите начало события"
+        }
+        return Self.dateTimeFormatter.string(from: combine(day: startDate, time: startTime))
+    }
 
-        if let endAt {
-            return DateFormatters.dateTime.string(from: endAt)
+    var formattedEndText: String {
+        guard let endDate else {
+            return "Выберите конец события"
+        }
+
+        if let endTime {
+            return Self.dateTimeFormatter.string(from: combine(day: endDate, time: endTime))
         } else {
-            return DateFormatters.dateOnly.string(from: endDay)
+            return Self.dateFormatter.string(from: endDate)
         }
     }
 
-    var startAt: Date? {
-        guard let startDay, let startTime else { return nil }
-        return Self.combine(day: startDay, time: startTime)
+    var calculatedDurationMinutes: Int? {
+        guard
+            let startDate,
+            let startTime,
+            let endDate,
+            let endTime
+        else {
+            return nil
+        }
+
+        let startDateTime = combine(day: startDate, time: startTime)
+        let endDateTime = combine(day: endDate, time: endTime)
+
+        guard endDateTime > startDateTime else {
+            return nil
+        }
+
+        return Int(endDateTime.timeIntervalSince(startDateTime) / 60)
     }
 
-    var endAt: Date? {
-        guard let endDay, let endTime else { return nil }
-        return Self.combine(day: endDay, time: endTime)
+    var calculatedDurationDisplay: String {
+        guard let calculatedDurationMinutes else {
+            return "—"
+        }
+        return Self.formatDuration(minutes: calculatedDurationMinutes)
     }
 
-    var durationMinutes: Int? {
-        guard let startAt, let endAt else { return nil }
-        let interval = endAt.timeIntervalSince(startAt)
-        guard interval > 0 else { return nil }
-        return Int(interval / 60)
+    var locationError: String? {
+        return nil
     }
 
-    var durationDisplayText: String {
-        guard let durationMinutes else { return "—" }
-        return Self.durationString(from: durationMinutes)
+    var startError: String? {
+        return nil
     }
 
-    var isVolunteersValid: Bool {
-        volunteersError == nil
+    var endError: String? {
+        guard let endDate else {
+            return nil
+        }
+
+        if let startDate, endDate < stripTime(from: startDate) {
+            return "Дата окончания не может быть раньше даты начала"
+        }
+
+        if let startDate, let startTime, let endTime {
+            let startDateTime = combine(day: startDate, time: startTime)
+            let endDateTime = combine(day: endDate, time: endTime)
+
+            if endDateTime <= startDateTime {
+                return "Конец события должен быть позже начала"
+            }
+        }
+
+        return nil
     }
 
     var volunteersError: String? {
-        let trimmed = volunteersInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = volunteersManualInput.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !trimmed.isEmpty else {
-            return "Введите количество волонтёров"
+        if trimmed.isEmpty {
+            return nil
         }
 
         guard let value = Int(trimmed) else {
             return "Введите число"
         }
 
-        if value == 0 {
+        if value <= 0 {
             return "Количество волонтёров должно быть больше 0"
         }
 
-        if value < 0 {
-            return "Введите корректное число"
-        }
-
         return nil
     }
 
-    var isValid: Bool {
-        !titleTrimmed.isEmpty &&
-        !descriptionTrimmed.isEmpty &&
-        selectedLocation != nil &&
-        startDay != nil &&
-        startTime != nil &&
-        endDay != nil &&
-        endValidationError == nil &&
-        isVolunteersValid
+    private var volunteersInputIsValid: Bool {
+        volunteersError == nil
     }
 
-    var endValidationError: String? {
-        guard let startDay, let endDay else { return nil }
-
-        let normalizedStart = Calendar.current.startOfDay(for: startDay)
-        let normalizedEnd = Calendar.current.startOfDay(for: endDay)
-
-        if normalizedEnd < normalizedStart {
-            return "Дата окончания не может быть раньше даты начала"
-        }
-
-        if let startAt, let endAt, endAt <= startAt {
-            return "Конец события должен быть позже начала"
-        }
-
-        return nil
+    func setLocation(title: String, coordinate: CLLocationCoordinate2D) {
+        locationText = title
+        selectedCoordinate = coordinate
     }
 
-    var titleTrimmed: String {
-        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    func increaseVolunteers() {
+        volunteersCount += 1
+        volunteersManualInput = "\(volunteersCount)"
     }
 
-    var descriptionTrimmed: String {
-        descriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+    func decreaseVolunteers() {
+        volunteersCount = max(1, volunteersCount - 1)
+        volunteersManualInput = "\(volunteersCount)"
     }
 
-    func setLocation(_ location: SelectedLocation) {
-        selectedLocation = location
-    }
+    func updateVolunteersFromInput(_ rawValue: String) {
+        let filtered = rawValue.filter(\.isNumber)
 
-    func saveStart(day: Date, time: Date) {
-        startDay = Calendar.current.startOfDay(for: day)
-        startTime = time
-
-        if let endDay, let startDay, endDay < startDay {
-            self.endDay = startDay
-        }
-
-        if let startAt, let endAt, endAt <= startAt {
-            self.endTime = nil
-        }
-    }
-
-    func saveEnd(day: Date, time: Date?) {
-        endDay = Calendar.current.startOfDay(for: day)
-        endTime = time
-    }
-
-    func incrementVolunteers() {
-        let next = currentVolunteers + 1
-        volunteersCount = next
-        volunteersInput = "\(next)"
-    }
-
-    func decrementVolunteers() {
-        let next = max(1, currentVolunteers - 1)
-        volunteersCount = next
-        volunteersInput = "\(next)"
-    }
-
-    func updateVolunteersInput(_ newValue: String) {
-        let digitsOnly = newValue.filter(\.isNumber)
-
-        if digitsOnly != newValue {
-            volunteersInput = digitsOnly
+        if filtered != rawValue {
+            volunteersManualInput = filtered
             return
         }
 
-        if let value = Int(digitsOnly) {
+        if let value = Int(filtered), value > 0 {
             volunteersCount = value
         }
     }
 
-    func buildDraft() -> EventDraft? {
-        guard
-            let selectedLocation,
-            let startAt,
-            let endDay,
-            isValid
-        else {
-            return nil
+    func clearMessages() {
+        errorMessage = nil
+        successMessage = nil
+    }
+
+    func submit() async {
+        clearMessages()
+
+        guard canSubmit else {
+            errorMessage = "Заполните все обязательные поля"
+            return
         }
 
-        return EventDraft(
-            title: titleTrimmed,
-            description: descriptionTrimmed,
-            locationAddress: selectedLocation.address,
-            locationCoordinate: selectedLocation.coordinate,
-            startAt: startAt,
-            endDay: endDay,
-            endAt: endAt,
-            durationMinutes: durationMinutes,
-            volunteersCount: currentVolunteers
-        )
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        successMessage = "Событие готово к отправке"
     }
 
-    func defaultStartDate() -> Date {
-        let rounded = Self.roundToHour(Date())
-        return max(rounded, todayStart)
+    func defaultStartSelection() -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.year, .month, .day], from: now)
+
+        return calendar.date(from: DateComponents(
+            year: components.year,
+            month: components.month,
+            day: components.day,
+            hour: 10,
+            minute: 0
+        )) ?? now
     }
 
-    func defaultEndDate() -> Date {
-        if let startDay {
-            return startDay
+    func defaultEndSelection() -> Date {
+        if let startDate, let startTime {
+            let start = combine(day: startDate, time: startTime)
+            return Calendar.current.date(byAdding: .hour, value: 2, to: start) ?? start
         }
-        return todayStart
+
+        let start = defaultStartSelection()
+        return Calendar.current.date(byAdding: .hour, value: 2, to: start) ?? start
     }
 
-    func defaultStartTime() -> Date {
-        Self.roundToHour(Date())
+    func stripTime(from date: Date) -> Date {
+        Calendar.current.startOfDay(for: date)
     }
 
-    func defaultEndTime() -> Date {
-        if let startTime {
-            return Calendar.current.date(byAdding: .hour, value: 1, to: startTime) ?? startTime
-        }
-        return Calendar.current.date(byAdding: .hour, value: 1, to: defaultStartTime()) ?? defaultStartTime()
-    }
-
-    var currentVolunteers: Int {
-        Int(volunteersInput) ?? volunteersCount
-    }
-
-    private static func combine(day: Date, time: Date) -> Date {
+    func combine(day: Date, time: Date) -> Date {
         let calendar = Calendar.current
         let dayComponents = calendar.dateComponents([.year, .month, .day], from: day)
         let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
 
-        var merged = DateComponents()
-        merged.year = dayComponents.year
-        merged.month = dayComponents.month
-        merged.day = dayComponents.day
-        merged.hour = timeComponents.hour
-        merged.minute = timeComponents.minute
-
-        return calendar.date(from: merged) ?? day
+        return calendar.date(from: DateComponents(
+            year: dayComponents.year,
+            month: dayComponents.month,
+            day: dayComponents.day,
+            hour: timeComponents.hour,
+            minute: timeComponents.minute
+        )) ?? day
     }
 
-    private static func roundToHour(_ date: Date) -> Date {
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.year, .month, .day, .hour], from: date)
-        return calendar.date(from: components) ?? date
+    private func trim(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func durationString(from minutes: Int) -> String {
-        let days = minutes / (24 * 60)
-        let hours = (minutes % (24 * 60)) / 60
-        let mins = minutes % 60
+    private static func formatDuration(minutes: Int) -> String {
+        let totalHours = minutes / 60
+        let remainingMinutes = minutes % 60
+
+        let days = totalHours / 24
+        let hours = totalHours % 24
 
         var parts: [String] = []
 
-        if days > 0 { parts.append("\(days) д") }
-        if hours > 0 { parts.append("\(hours) ч") }
-        if mins > 0 && days == 0 { parts.append("\(mins) мин") }
+        if days > 0 {
+            parts.append("\(days) д")
+        }
+        if hours > 0 {
+            parts.append("\(hours) ч")
+        }
+        if days == 0 && hours == 0 && remainingMinutes > 0 {
+            parts.append("\(remainingMinutes) мин")
+        }
 
-        return parts.isEmpty ? "0 мин" : parts.joined(separator: " ")
+        return parts.isEmpty ? "0 ч" : parts.joined(separator: " ")
     }
-}
 
-enum DateFormatters {
-    static let dateOnly: DateFormatter = {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
         formatter.dateFormat = "d MMMM yyyy"
         return formatter
     }()
 
-    static let dateTime: DateFormatter = {
+    private static let dateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
         formatter.dateFormat = "d MMMM yyyy, HH:mm"
         return formatter
     }()
+}
+
+struct CISCitiesCountry: Decodable {
+    let country: String
+    let cities: [String]
+}
+
+@MainActor
+final class EventLocationSearchService: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+    struct Suggestion: Identifiable, Hashable {
+        let id = UUID()
+        let title: String
+        let subtitle: String
+        fileprivate let completion: MKLocalSearchCompletion
+    }
+
+    @Published var query = ""
+    @Published var suggestions: [Suggestion] = []
+
+    private let completer = MKLocalSearchCompleter()
+    private var cancellables = Set<AnyCancellable>()
+
+    private let cisCountries: [String]
+    private let cisCities: [String]
+
+    override init() {
+        let data = Self.loadCISCities()
+        self.cisCountries = data.map { $0.country.lowercased() }
+        self.cisCities = data.flatMap { $0.cities }.map { $0.lowercased() }
+
+        super.init()
+
+        completer.delegate = self
+        completer.resultTypes = [.address, .pointOfInterest]
+
+        $query
+            .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] text in
+                self?.updateQuery(text)
+            }
+            .store(in: &cancellables)
+    }
+
+    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        suggestions = completer.results
+            .filter { isAllowedCISSuggestion(title: $0.title, subtitle: $0.subtitle) }
+            .map {
+                Suggestion(
+                    title: $0.title,
+                    subtitle: $0.subtitle,
+                    completion: $0
+                )
+            }
+    }
+
+    func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        suggestions = []
+    }
+
+    func search(for suggestion: Suggestion) async throws -> MKMapItem? {
+        let request = MKLocalSearch.Request(completion: suggestion.completion)
+        let search = MKLocalSearch(request: request)
+        let response = try await search.start()
+
+        guard let item = response.mapItems.first else {
+            return nil
+        }
+
+        return isAllowedCISMapItem(item) ? item : nil
+    }
+
+    private func updateQuery(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            suggestions = []
+        }
+
+        completer.queryFragment = trimmed
+    }
+
+    private func isAllowedCISSuggestion(title: String, subtitle: String) -> Bool {
+        let combined = "\(title.lowercased()) \(subtitle.lowercased())"
+
+        if cisCountries.contains(where: { combined.contains($0) }) {
+            return true
+        }
+
+        if cisCities.contains(where: { combined.contains($0) }) {
+            return true
+        }
+
+        return false
+    }
+
+    private func isAllowedCISMapItem(_ item: MKMapItem) -> Bool {
+        let placemark = item.placemark
+
+        let country = placemark.country?.lowercased() ?? ""
+        let locality = placemark.locality?.lowercased() ?? ""
+        let administrativeArea = placemark.administrativeArea?.lowercased() ?? ""
+        let name = placemark.name?.lowercased() ?? ""
+        let combined = "\(country) \(locality) \(administrativeArea) \(name)"
+
+        if cisCountries.contains(where: { combined.contains($0) }) {
+            return true
+        }
+
+        if cisCities.contains(where: { combined.contains($0) }) {
+            return true
+        }
+
+        return false
+    }
+
+    private static func loadCISCities() -> [CISCitiesCountry] {
+        guard
+            let url = Bundle.main.url(forResource: "cities", withExtension: "json"),
+            let data = try? Data(contentsOf: url),
+            let decoded = try? JSONDecoder().decode([CISCitiesCountry].self, from: data)
+        else {
+            return []
+        }
+
+        return decoded
+    }
 }
