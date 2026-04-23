@@ -77,8 +77,6 @@
 				443BD9B42F4634E600429D5A /* volunteerClient */,
 			);
 			name = volunteerClient;
-			packageProductDependencies = (
-			);
 			productName = volunteerClient;
 			productReference = 443BD9B22F4634E600429D5A /* volunteerClient.app */;
 			productType = "com.apple.product-type.application";

@@ -13,6 +13,7 @@ struct HomePageView: View {
 
     @State private var selectedTab: HomeTab = .map
     @State private var isEditingProfile = false
+    @State private var isEventFormPresented = false
 
     init(session: AppSession) {
         self.session = session
@@ -33,6 +34,13 @@ struct HomePageView: View {
             .background(Color(.systemGray6).ignoresSafeArea())
             .task {
                 await profileModel.loadMyProfileIfNeeded()
+            }
+            .fullScreenCover(isPresented: $isEventFormPresented) {
+                NavigationStack {
+                    EventFormView(session: session) {
+                        isEventFormPresented = false
+                    }
+                }
             }
     }
 
@@ -64,6 +72,9 @@ struct HomePageView: View {
 
         case .map:
             MapEventsView(
+                onCreateEventTap: {
+                    isEventFormPresented = true
+                },
                 onNotificationsTap: {
                     // TODO: notifications
                 }
@@ -73,7 +84,9 @@ struct HomePageView: View {
             SearchEventsView()
 
         case .events:
-            MyEventsView()
+            MyEventsView {
+                isEventFormPresented = true
+            }
         }
     }
 }

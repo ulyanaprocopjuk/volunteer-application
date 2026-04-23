@@ -1,7 +1,6 @@
 import Foundation
-import Combine
 import CoreLocation
-import MapKit
+import Combine
 
 @MainActor
 final class EventViewModel: ObservableObject {
@@ -21,8 +20,30 @@ final class EventViewModel: ObservableObject {
     @Published var volunteersManualInput: String = "1"
 
     @Published var isSubmitting = false
+    @Published var isProfileContextLoading = false
     @Published var errorMessage: String?
     @Published var successMessage: String?
+    @Published private(set) var locationContext: EventLocationContext?
+
+    private let session: AppSession
+    private let profileAPI: ProfileAPIProtocol
+    private let eventAPI: EventAPIProtocol
+    private let geocodingAPI: GeocodingAPIProtocol
+
+    private var selectedLocation: EventLocationSelection?
+    private var hasLoadedProfileContext = false
+
+    init(
+        session: AppSession,
+        profileAPI: ProfileAPIProtocol? = nil,
+        eventAPI: EventAPIProtocol? = nil,
+        geocodingAPI: GeocodingAPIProtocol? = nil
+    ) {
+        self.session = session
+        self.profileAPI = profileAPI ?? ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.eventAPI = eventAPI ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.geocodingAPI = geocodingAPI ?? GeocodingAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+    }
 
     var todayStart: Date {
         Calendar.current.startOfDay(for: Date())
@@ -41,7 +62,11 @@ final class EventViewModel: ObservableObject {
     }
 
     var locationPlaceholder: String {
-        "Выберите местоположение"
+        if let locationContext {
+            return "Искать адрес в \(locationContext.city), \(locationContext.country)"
+        }
+
+        return "Выберите местоположение"
     }
 
     var formattedStartText: String {
@@ -58,44 +83,21 @@ final class EventViewModel: ObservableObject {
 
         if let endTime {
             return Self.dateTimeFormatter.string(from: combine(day: endDate, time: endTime))
-        } else {
-            return Self.dateFormatter.string(from: endDate)
         }
+
+        return Self.dateFormatter.string(from: endDate)
     }
 
-    var calculatedDurationMinutes: Int? {
-        guard
-            let startDate,
-            let startTime,
-            let endDate,
-            let endTime
-        else {
-            return nil
-        }
-
-        let startDateTime = combine(day: startDate, time: startTime)
-        let endDateTime = combine(day: endDate, time: endTime)
-
-        guard endDateTime > startDateTime else {
-            return nil
-        }
-
-        return Int(endDateTime.timeIntervalSince(startDateTime) / 60)
-    }
-
-    var calculatedDurationDisplay: String {
-        guard let calculatedDurationMinutes else {
-            return "—"
-        }
-        return Self.formatDuration(minutes: calculatedDurationMinutes)
+    var currentLocationSelection: EventLocationSelection? {
+        selectedLocation
     }
 
     var locationError: String? {
-        return nil
+        nil
     }
 
     var startError: String? {
-        return nil
+        nil
     }
 
     var endError: String? {
@@ -141,9 +143,47 @@ final class EventViewModel: ObservableObject {
         volunteersError == nil
     }
 
-    func setLocation(title: String, coordinate: CLLocationCoordinate2D) {
-        locationText = title
-        selectedCoordinate = coordinate
+    func loadProfileContextIfNeeded() async {
+        guard !hasLoadedProfileContext, !isProfileContextLoading else { return }
+
+        isProfileContextLoading = true
+        defer { isProfileContextLoading = false }
+
+        do {
+            let token = try await session.validAccessToken()
+            let profile = try await profileAPI.fetchMyProfile(token: token)
+            let country = canonicalCountry(from: profile.country)
+            let city = canonicalCity(from: profile.city, in: country)
+            let searchArea = CityDirectory.searchArea(for: country)
+            let cityCoordinate = try await geocodingAPI.geocodeCity(city: city, country: country, area: searchArea)
+                ?? searchArea.center
+
+            locationContext = EventLocationContext(
+                country: country,
+                city: city,
+                countrySearchArea: searchArea,
+                cityCoordinate: cityCoordinate
+            )
+            hasLoadedProfileContext = true
+        } catch {
+            let country = CityDirectory.defaultCountry
+            let city = CityDirectory.cities(for: country).first ?? "Минск"
+            let searchArea = CityDirectory.searchArea(for: country)
+
+            locationContext = EventLocationContext(
+                country: country,
+                city: city,
+                countrySearchArea: searchArea,
+                cityCoordinate: searchArea.center
+            )
+            hasLoadedProfileContext = true
+        }
+    }
+
+    func setLocation(_ selection: EventLocationSelection) {
+        selectedLocation = selection
+        locationText = selection.address
+        selectedCoordinate = selection.coordinate
     }
 
     func increaseVolunteers() {
@@ -182,11 +222,46 @@ final class EventViewModel: ObservableObject {
             return
         }
 
+        guard let selectedCoordinate,
+              let country = selectedLocation?.country ?? locationContext?.country,
+              let city = selectedLocation?.city ?? locationContext?.city,
+              !country.isEmpty,
+              !city.isEmpty else {
+            errorMessage = "Не удалось определить местоположение события"
+            return
+        }
+
+        guard let volunteersNeeded = Int(volunteersManualInput),
+              let startDate,
+              let startTime else {
+            errorMessage = "Заполните все обязательные поля"
+            return
+        }
+
         isSubmitting = true
         defer { isSubmitting = false }
 
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        successMessage = "Событие готово к отправке"
+        do {
+            let token = try await session.validAccessToken()
+            let request = CreateEventRequest(
+                title: trim(eventTitle),
+                description: trim(eventDescription),
+                country: CityDirectory.canonicalCountryName(for: country),
+                city: city,
+                locationName: trim(locationText),
+                latitude: selectedCoordinate.latitude,
+                longitude: selectedCoordinate.longitude,
+                startsAt: iso8601String(from: combine(day: startDate, time: startTime)),
+                endsAt: endTimestamp,
+                volunteersNeeded: volunteersNeeded
+            )
+
+            let response = try await eventAPI.createEvent(request, token: token)
+            successMessage = response.message ?? "Событие создано"
+            resetFormKeepingContext()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func defaultStartSelection() -> Date {
@@ -231,30 +306,47 @@ final class EventViewModel: ObservableObject {
         )) ?? day
     }
 
-    private func trim(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var endTimestamp: String? {
+        guard let endDate, let endTime else { return nil }
+        return iso8601String(from: combine(day: endDate, time: endTime))
     }
 
-    private static func formatDuration(minutes: Int) -> String {
-        let totalHours = minutes / 60
-        let remainingMinutes = minutes % 60
+    private func resetFormKeepingContext() {
+        eventTitle = ""
+        eventDescription = ""
+        locationText = ""
+        selectedCoordinate = nil
+        selectedLocation = nil
+        startDate = nil
+        startTime = nil
+        endDate = nil
+        endTime = nil
+        volunteersCount = 1
+        volunteersManualInput = "1"
+    }
 
-        let days = totalHours / 24
-        let hours = totalHours % 24
+    private func canonicalCountry(from profileCountry: String?) -> String {
+        let fallbackCountry = CityDirectory.defaultCountry
+        let raw = trim(profileCountry ?? "")
+        guard !raw.isEmpty else { return fallbackCountry }
+        return CityDirectory.canonicalCountryName(for: raw)
+    }
 
-        var parts: [String] = []
-
-        if days > 0 {
-            parts.append("\(days) д")
+    private func canonicalCity(from profileCity: String?, in country: String) -> String {
+        let trimmedCity = trim(profileCity ?? "")
+        if !trimmedCity.isEmpty {
+            return trimmedCity
         }
-        if hours > 0 {
-            parts.append("\(hours) ч")
-        }
-        if days == 0 && hours == 0 && remainingMinutes > 0 {
-            parts.append("\(remainingMinutes) мин")
-        }
 
-        return parts.isEmpty ? "0 ч" : parts.joined(separator: " ")
+        return CityDirectory.cities(for: country).first ?? "Минск"
+    }
+
+    private func iso8601String(from date: Date) -> String {
+        Self.iso8601Formatter.string(from: date)
+    }
+
+    private func trim(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -270,131 +362,10 @@ final class EventViewModel: ObservableObject {
         formatter.dateFormat = "d MMMM yyyy, HH:mm"
         return formatter
     }()
-}
 
-struct CISCitiesCountry: Decodable {
-    let country: String
-    let cities: [String]
-}
-
-@MainActor
-final class EventLocationSearchService: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
-    struct Suggestion: Identifiable, Hashable {
-        let id = UUID()
-        let title: String
-        let subtitle: String
-        fileprivate let completion: MKLocalSearchCompletion
-    }
-
-    @Published var query = ""
-    @Published var suggestions: [Suggestion] = []
-
-    private let completer = MKLocalSearchCompleter()
-    private var cancellables = Set<AnyCancellable>()
-
-    private let cisCountries: [String]
-    private let cisCities: [String]
-
-    override init() {
-        let data = Self.loadCISCities()
-        self.cisCountries = data.map { $0.country.lowercased() }
-        self.cisCities = data.flatMap { $0.cities }.map { $0.lowercased() }
-
-        super.init()
-
-        completer.delegate = self
-        completer.resultTypes = [.address, .pointOfInterest]
-
-        $query
-            .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
-            .removeDuplicates()
-            .sink { [weak self] text in
-                self?.updateQuery(text)
-            }
-            .store(in: &cancellables)
-    }
-
-    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
-        suggestions = completer.results
-            .filter { isAllowedCISSuggestion(title: $0.title, subtitle: $0.subtitle) }
-            .map {
-                Suggestion(
-                    title: $0.title,
-                    subtitle: $0.subtitle,
-                    completion: $0
-                )
-            }
-    }
-
-    func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
-        suggestions = []
-    }
-
-    func search(for suggestion: Suggestion) async throws -> MKMapItem? {
-        let request = MKLocalSearch.Request(completion: suggestion.completion)
-        let search = MKLocalSearch(request: request)
-        let response = try await search.start()
-
-        guard let item = response.mapItems.first else {
-            return nil
-        }
-
-        return isAllowedCISMapItem(item) ? item : nil
-    }
-
-    private func updateQuery(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if trimmed.isEmpty {
-            suggestions = []
-        }
-
-        completer.queryFragment = trimmed
-    }
-
-    private func isAllowedCISSuggestion(title: String, subtitle: String) -> Bool {
-        let combined = "\(title.lowercased()) \(subtitle.lowercased())"
-
-        if cisCountries.contains(where: { combined.contains($0) }) {
-            return true
-        }
-
-        if cisCities.contains(where: { combined.contains($0) }) {
-            return true
-        }
-
-        return false
-    }
-
-    private func isAllowedCISMapItem(_ item: MKMapItem) -> Bool {
-        let placemark = item.placemark
-
-        let country = placemark.country?.lowercased() ?? ""
-        let locality = placemark.locality?.lowercased() ?? ""
-        let administrativeArea = placemark.administrativeArea?.lowercased() ?? ""
-        let name = placemark.name?.lowercased() ?? ""
-        let combined = "\(country) \(locality) \(administrativeArea) \(name)"
-
-        if cisCountries.contains(where: { combined.contains($0) }) {
-            return true
-        }
-
-        if cisCities.contains(where: { combined.contains($0) }) {
-            return true
-        }
-
-        return false
-    }
-
-    private static func loadCISCities() -> [CISCitiesCountry] {
-        guard
-            let url = Bundle.main.url(forResource: "cities", withExtension: "json"),
-            let data = try? Data(contentsOf: url),
-            let decoded = try? JSONDecoder().decode([CISCitiesCountry].self, from: data)
-        else {
-            return []
-        }
-
-        return decoded
-    }
+    private static let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 }

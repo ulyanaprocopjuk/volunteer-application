@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MapEventsView: View {
+    var onCreateEventTap: () -> Void = {}
     var onNotificationsTap: () -> Void = {}
 
     var body: some View {
@@ -31,6 +32,16 @@ struct MapEventsView: View {
 
     private var topBar: some View {
         HStack {
+            Button {
+                onCreateEventTap()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+
             Spacer()
 
             Button {

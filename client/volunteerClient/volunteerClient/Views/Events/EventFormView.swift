@@ -3,7 +3,9 @@ import MapKit
 import CoreLocation
 
 struct EventFormView: View {
-    @StateObject private var viewModel = EventViewModel()
+    @Environment(\.dismiss) private var dismiss
+
+    @StateObject private var viewModel: EventViewModel
 
     @State private var isLocationSheetPresented = false
     @State private var activePicker: ActivePicker?
@@ -14,6 +16,8 @@ struct EventFormView: View {
     @State private var draftEndDate = Date()
     @State private var draftEndTime = Date()
 
+    private let onBack: (() -> Void)?
+
     enum ActivePicker: String, Identifiable {
         case start
         case end
@@ -21,163 +25,198 @@ struct EventFormView: View {
         var id: String { rawValue }
     }
 
+    init(session: AppSession, onBack: (() -> Void)? = nil) {
+        self.onBack = onBack
+        _viewModel = StateObject(wrappedValue: EventViewModel(session: session))
+    }
+
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 22) {
-                    EventLabeledInputField(
-                        title: "Название события",
-                        text: $viewModel.eventTitle,
-                        placeholder: "Введите название события"
-                    )
+        ZStack(alignment: .top) {
+            Color.white.ignoresSafeArea()
 
-                    EventLabeledMultilineField(
-                        title: "Описание",
-                        text: $viewModel.eventDescription,
-                        placeholder: "Введите описание события"
-                    )
+            Rectangle()
+                .fill(Color(.systemGray6))
+                .frame(height: 108)
+                .ignoresSafeArea(edges: .top)
+                .shadow(color: .black.opacity(0.06), radius: 12, y: 3)
 
-                    EventPickerField(
-                        title: "Местоположение",
-                        value: viewModel.locationText,
-                        placeholder: viewModel.locationPlaceholder,
-                        error: viewModel.locationError,
-                        systemImage: "mappin.and.ellipse"
-                    ) {
-                        isLocationSheetPresented = true
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        EventFieldTitle(title: "Начало события")
-
-                        EventPickerField(
-                            title: "",
-                            value: viewModel.startDate != nil && viewModel.startTime != nil ? viewModel.formattedStartText : "",
-                            placeholder: "Выберите начало события",
-                            error: viewModel.startError,
-                            systemImage: "calendar"
-                        ) {
-                            draftStartDate = viewModel.startDate ?? viewModel.defaultStartSelection()
-                            draftStartTime = viewModel.startTime ?? viewModel.defaultStartSelection()
-                            activePicker = .start
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        EventFieldTitle(title: "Конец события")
-
-                        EventPickerField(
-                            title: "",
-                            value: viewModel.endDate != nil ? viewModel.formattedEndText : "",
-                            placeholder: "Выберите конец события",
-                            error: viewModel.endError,
-                            systemImage: "calendar.badge.clock"
-                        ) {
-                            let defaultEnd = viewModel.defaultEndSelection()
-                            draftEndDate = viewModel.endDate ?? defaultEnd
-                            draftEndTime = viewModel.endTime ?? defaultEnd
-                            activePicker = .end
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        EventFieldTitle(title: "Количество волонтёров")
-
-                        HStack(spacing: 10) {
-                            Button {
-                                viewModel.decreaseVolunteers()
-                            } label: {
-                                Image(systemName: "minus")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.black)
-                                    .frame(width: 36, height: 36)
-                                    .background(
-                                        Circle().fill(Color(.systemGray5))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-
-                            TextField("Количество", text: $viewModel.volunteersManualInput)
-                                .keyboardType(.phonePad)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled(true)
-                                .multilineTextAlignment(.center)
-                                .font(.system(size: 15))
-                                .onChange(of: viewModel.volunteersManualInput) { newValue in
-                                    viewModel.updateVolunteersFromInput(newValue)
-                                }
-
-                            Button {
-                                viewModel.increaseVolunteers()
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.black)
-                                    .frame(width: 36, height: 36)
-                                    .background(
-                                        Circle().fill(Color(.systemGray5))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 18)
-                        .frame(height: 58)
-                        .overlay(
-                            Capsule()
-                                .stroke(
-                                    viewModel.volunteersError == nil
-                                        ? Color.gray.opacity(0.45)
-                                        : Color.red,
-                                    lineWidth: 1
-                                )
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        EventLabeledInputField(
+                            title: "Название события",
+                            text: $viewModel.eventTitle,
+                            placeholder: "Введите название события"
                         )
 
-                        if let error = viewModel.volunteersError {
-                            Text(error)
-                                .font(.system(size: 13))
-                                .foregroundColor(.red)
-                                .padding(.leading, 8)
+                        EventLabeledMultilineField(
+                            title: "Описание",
+                            text: $viewModel.eventDescription,
+                            placeholder: "Введите описание события"
+                        )
+
+                        EventPickerField(
+                            title: "Местоположение",
+                            value: viewModel.locationText,
+                            placeholder: viewModel.locationPlaceholder,
+                            error: viewModel.locationError,
+                            systemImage: "mappin.and.ellipse"
+                        ) {
+                            isLocationSheetPresented = true
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            EventFieldTitle(title: "Начало события")
+
+                            EventPickerField(
+                                title: "",
+                                value: viewModel.startDate != nil && viewModel.startTime != nil ? viewModel.formattedStartText : "",
+                                placeholder: "Выберите начало события",
+                                error: viewModel.startError,
+                                systemImage: "calendar"
+                            ) {
+                                draftStartDate = viewModel.startDate ?? viewModel.defaultStartSelection()
+                                draftStartTime = viewModel.startTime ?? viewModel.defaultStartSelection()
+                                activePicker = .start
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            EventFieldTitle(title: "Конец события")
+
+                            EventPickerField(
+                                title: "",
+                                value: viewModel.endDate != nil ? viewModel.formattedEndText : "",
+                                placeholder: "Выберите конец события",
+                                error: viewModel.endError,
+                                systemImage: "calendar.badge.clock"
+                            ) {
+                                let defaultEnd = viewModel.defaultEndSelection()
+                                draftEndDate = viewModel.endDate ?? defaultEnd
+                                draftEndTime = viewModel.endTime ?? defaultEnd
+                                activePicker = .end
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            EventFieldTitle(title: "Количество волонтёров")
+
+                            HStack(spacing: 10) {
+                                Button {
+                                    viewModel.decreaseVolunteers()
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.black)
+                                        .frame(width: 36, height: 36)
+                                        .background(
+                                            Circle().fill(Color(.systemGray5))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+
+                                TextField("Количество", text: $viewModel.volunteersManualInput)
+                                    .keyboardType(.phonePad)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled(true)
+                                    .multilineTextAlignment(.center)
+                                    .font(.system(size: 15))
+                                    .onChange(of: viewModel.volunteersManualInput) { newValue in
+                                        viewModel.updateVolunteersFromInput(newValue)
+                                    }
+
+                                Button {
+                                    viewModel.increaseVolunteers()
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.black)
+                                        .frame(width: 36, height: 36)
+                                        .background(
+                                            Circle().fill(Color(.systemGray5))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 18)
+                            .frame(height: 58)
+                            .overlay(
+                                Capsule()
+                                    .stroke(
+                                        viewModel.volunteersError == nil
+                                            ? Color.gray.opacity(0.45)
+                                            : Color.red,
+                                        lineWidth: 1
+                                    )
+                            )
+
+                            if let error = viewModel.volunteersError {
+                                Text(error)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.red)
+                                    .padding(.leading, 8)
+                            }
                         }
                     }
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
 
-                Button {
-                    Task {
-                        await viewModel.submit()
-                    }
-                } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
-
-                        if viewModel.isSubmitting {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Создать событие")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
+                    Button {
+                        Task {
+                            await viewModel.submit()
                         }
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                            if viewModel.isSubmitting {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("Создать событие")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
+                    .disabled(!viewModel.canSubmit || viewModel.isSubmitting)
+                    .opacity((!viewModel.canSubmit || viewModel.isSubmitting) ? 0.55 : 1)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 30)
+                    .padding(.bottom, 24)
                 }
-                .disabled(!viewModel.canSubmit || viewModel.isSubmitting)
-                .opacity((!viewModel.canSubmit || viewModel.isSubmitting) ? 0.55 : 1)
-                .padding(.horizontal, 24)
-                .padding(.top, 30)
-                .padding(.bottom, 24)
+                .padding(.bottom, 18)
             }
-            .padding(.bottom, 18)
         }
-        .background(Color(.systemGray6).ignoresSafeArea())
         .navigationTitle("Новое событие")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    handleBack()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.black)
+                }
+            }
+        }
         .toolbarBackground(Color(.systemGray6), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .sheet(isPresented: $isLocationSheetPresented) {
-            EventLocationPickerSheet(viewModel: viewModel)
+        .fullScreenCover(isPresented: $isLocationSheetPresented) {
+            if let context = viewModel.locationContext {
+                EventLocationPickerSheet(
+                    context: context,
+                    initialSelection: viewModel.currentLocationSelection
+                ) { selection in
+                    viewModel.setLocation(selection)
+                }
+            } else {
+                ProgressView("Загрузка...")
+                    .presentationDetents([.height(180)])
+            }
         }
         .sheet(item: $activePicker) { picker in
             EventDateTimePickerSheet(
@@ -252,6 +291,17 @@ struct EventFormView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text(viewModel.successMessage ?? "")
+        }
+        .task {
+            await viewModel.loadProfileContextIfNeeded()
+        }
+    }
+
+    private func handleBack() {
+        if let onBack {
+            onBack()
+        } else {
+            dismiss()
         }
     }
 }
@@ -546,99 +596,127 @@ private struct EventFieldTitle: View {
 private struct EventLocationPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @ObservedObject var viewModel: EventViewModel
-    @StateObject private var searchService = EventLocationSearchService()
+    let onSelect: (EventLocationSelection) -> Void
+    @FocusState private var isSearchFieldFocused: Bool
 
-    @State private var cameraPosition: MapCameraPosition = .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 53.9006, longitude: 27.5590),
-            span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
+    @StateObject private var viewModel: EventLocationPickerViewModel
+
+    init(
+        context: EventLocationContext,
+        initialSelection: EventLocationSelection? = nil,
+        onSelect: @escaping (EventLocationSelection) -> Void
+    ) {
+        self.onSelect = onSelect
+        _viewModel = StateObject(
+            wrappedValue: EventLocationPickerViewModel(
+                context: context,
+                initialSelection: initialSelection
+            )
         )
-    )
-
-    @State private var draftCoordinate: CLLocationCoordinate2D?
-    @State private var draftLocationText = "Выберите местоположение"
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                searchBar
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
+            ScrollView {
+                VStack(spacing: 12) {
+                    searchBar
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
 
-                if !searchService.suggestions.isEmpty {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(searchService.suggestions) { suggestion in
-                                Button {
-                                    Task {
-                                        await selectSuggestion(suggestion)
-                                    }
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(suggestion.title)
-                                            .font(.system(size: 15, weight: .semibold))
-                                            .foregroundColor(.black)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        if !suggestion.subtitle.isEmpty {
-                                            Text(suggestion.subtitle)
-                                                .font(.system(size: 13))
-                                                .foregroundColor(.gray)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
+                    if !viewModel.suggestions.isEmpty {
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(viewModel.suggestions) { suggestion in
+                                    Button {
+                                        Task {
+                                            await viewModel.chooseSuggestion(suggestion)
                                         }
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(suggestion.title)
+                                                .font(.system(size: 15, weight: .semibold))
+                                                .foregroundColor(.black)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                            if !suggestion.subtitle.isEmpty {
+                                                Text(suggestion.subtitle)
+                                                    .font(.system(size: 13))
+                                                    .foregroundColor(.gray)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                            }
+                                        }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
                                     }
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 12)
+                                    .buttonStyle(.plain)
+
+                                    Divider()
                                 }
-                                .buttonStyle(.plain)
-
-                                Divider()
                             }
                         }
+                        .frame(maxHeight: 180)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.white)
+                        )
+                        .padding(.horizontal, 16)
                     }
-                    .frame(maxHeight: 180)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white)
-                    )
-                    .padding(.horizontal, 16)
-                }
 
-                MapReader { proxy in
-                    Map(position: $cameraPosition) {
-                        if let draftCoordinate {
-                            Marker("Событие", coordinate: draftCoordinate)
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .onTapGesture { point in
-                        if let coordinate = proxy.convert(point, from: .local) {
-                            draftCoordinate = coordinate
+                    ZStack {
+                        EventMapView(
+                            cameraCoordinate: viewModel.cameraCoordinate
+                        ) { coordinate in
                             Task {
-                                await resolveAddress(for: coordinate)
+                                await viewModel.handleMapTap(coordinate)
                             }
+                        } onRegionDidChange: { coordinate in
+                            viewModel.handleMapRegionDidChange(to: coordinate)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 34))
+                            .foregroundStyle(Color(red: 44/255, green: 67/255, blue: 102/255))
+                            .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                            .offset(y: -14)
+
+                        if viewModel.isSearching || viewModel.isInitialLocationLoading {
+                            ProgressView()
+                                .padding(14)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Capsule())
                         }
                     }
+                    .frame(height: 340)
+                    .padding(.horizontal, 16)
+
+                    if let feedbackMessage = viewModel.searchFeedbackMessage {
+                        Text(feedbackMessage)
+                            .font(.system(size: 13))
+                            .foregroundColor(viewModel.searchFeedbackIsError ? .red : .gray)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Выбранная локация")
+                            .font(.system(size: 16, weight: .semibold))
+
+                        Text(viewModel.selectedLocation?.address ?? "Выберите местоположение")
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
                 }
-                .frame(height: 340)
-                .padding(.horizontal, 16)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Выбранная локация")
-                        .font(.system(size: 16, weight: .semibold))
-
-                    Text(draftLocationText)
-                        .font(.system(size: 14))
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.leading)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-
+                .padding(.bottom, 90)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) {
                 Button {
-                    guard let draftCoordinate else { return }
-                    viewModel.setLocation(title: draftLocationText, coordinate: draftCoordinate)
+                    guard let selection = viewModel.selectedLocation else { return }
+                    onSelect(selection)
                     dismiss()
                 } label: {
                     Text("Выбрать эту локацию")
@@ -651,14 +729,16 @@ private struct EventLocationPickerSheet: View {
                                 .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
                         )
                 }
-                .disabled(draftCoordinate == nil)
-                .opacity(draftCoordinate == nil ? 0.55 : 1)
+                .disabled(viewModel.selectedLocation == nil)
+                .opacity(viewModel.selectedLocation == nil ? 0.55 : 1)
                 .padding(.horizontal, 16)
-
-                Spacer()
+                .padding(.vertical, 8)
+                .background(.background)
             }
             .navigationTitle("Местоположение")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Отмена") {
@@ -666,23 +746,16 @@ private struct EventLocationPickerSheet: View {
                     }
                 }
             }
-            .onAppear {
-                draftCoordinate = viewModel.selectedCoordinate
-
-                if let selectedCoordinate = viewModel.selectedCoordinate {
-                    cameraPosition = .region(
-                        MKCoordinateRegion(
-                            center: selectedCoordinate,
-                            span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-                        )
-                    )
-                }
-
-                if !viewModel.locationText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    draftLocationText = viewModel.locationText
-                } else {
-                    draftLocationText = "Выберите местоположение"
-                }
+            .alert("Ошибка", isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(viewModel.errorMessage ?? "")
+            }
+            .task {
+                await viewModel.loadInitialLocationIfNeeded()
             }
         }
     }
@@ -692,10 +765,20 @@ private struct EventLocationPickerSheet: View {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-            TextField("Искать адрес, улицу, дом, организацию", text: $searchService.query)
+            TextField("Искать улицу, дом, здание, организацию", text: $viewModel.query)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .font(.system(size: 15))
+
+            if !viewModel.query.isEmpty {
+                Button {
+                    viewModel.clearSearch()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 16)
         .frame(height: 48)
@@ -708,107 +791,10 @@ private struct EventLocationPickerSheet: View {
                 .stroke(Color.gray.opacity(0.18), lineWidth: 1)
         )
     }
-
-    private func selectSuggestion(_ suggestion: EventLocationSearchService.Suggestion) async {
-        do {
-            if let item = try await searchService.search(for: suggestion),
-               let coordinate = item.placemark.location?.coordinate {
-                draftCoordinate = coordinate
-                draftLocationText = formattedPlacemark(
-                    item.placemark,
-                    fallbackTitle: suggestion.title,
-                    fallbackSubtitle: suggestion.subtitle
-                )
-
-                cameraPosition = .region(
-                    MKCoordinateRegion(
-                        center: coordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                    )
-                )
-
-                searchService.query = draftLocationText
-                searchService.suggestions = []
-            }
-        } catch {
-            // no-op
-        }
-    }
-
-    private func resolveAddress(for coordinate: CLLocationCoordinate2D) async {
-        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let geocoder = CLGeocoder()
-
-        do {
-            let placemarks = try await geocoder.reverseGeocodeLocation(location)
-            if let placemark = placemarks.first {
-                draftLocationText = formattedPlacemark(
-                    placemark,
-                    fallbackTitle: "Выбранная точка",
-                    fallbackSubtitle: ""
-                )
-            } else {
-                draftLocationText = "Выберите местоположение"
-            }
-        } catch {
-            draftLocationText = "Выберите местоположение"
-        }
-    }
-
-    private func formattedPlacemark(
-        _ placemark: CLPlacemark,
-        fallbackTitle: String,
-        fallbackSubtitle: String
-    ) -> String {
-        let street = [placemark.thoroughfare, placemark.subThoroughfare]
-            .compactMap { $0 }
-            .joined(separator: ", ")
-
-        let locality = placemark.locality?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let parts: [String] = [
-            street.nilIfEmpty,
-            locality.nilIfEmpty
-        ]
-        .compactMap { $0 }
-
-        if !parts.isEmpty {
-            return parts.joined(separator: ", ")
-        }
-
-        let fallbackParts: [String] = [
-            fallbackTitle.nilIfEmpty,
-            fallbackSubtitle.nilIfEmpty
-        ]
-        .compactMap { $0 }
-
-        return fallbackParts.isEmpty
-            ? "Выберите местоположение"
-            : fallbackParts.joined(separator: ", ")
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-}
-
-private extension Optional where Wrapped == String {
-    var nilIfEmpty: String? {
-        switch self {
-        case .some(let value):
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed
-        case .none:
-            return nil
-        }
-    }
 }
 
 #Preview {
     NavigationStack {
-        EventFormView()
+        EventFormView(session: AppSession())
     }
 }
