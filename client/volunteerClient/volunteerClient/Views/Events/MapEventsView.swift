@@ -3,6 +3,7 @@ import SwiftUI
 struct MapEventsView: View {
     var onCreateEventTap: () -> Void = {}
     var onNotificationsTap: () -> Void = {}
+    var hasNotifications: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,10 +48,19 @@ struct MapEventsView: View {
             Button {
                 onNotificationsTap()
             } label: {
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.black)
-                    .frame(width: 40, height: 40)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "bell.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(width: 40, height: 40)
+
+                    if hasNotifications {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 10, height: 10)
+                            .offset(x: -6, y: 6)
+                    }
+                }
             }
             .buttonStyle(.plain)
         }

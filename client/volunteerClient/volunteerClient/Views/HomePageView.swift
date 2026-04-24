@@ -10,15 +10,18 @@ enum HomeTab {
 struct HomePageView: View {
     @ObservedObject var session: AppSession
     @StateObject private var profileModel: ProfileSetupViewModel
+    @StateObject private var notificationModel: NotificationViewModel
 
     @State private var selectedTab: HomeTab = .map
     @State private var isEditingProfile = false
     @State private var isEventFormPresented = false
+    @State private var isNotificationsPresented = false
     @State private var showModerationMessage = false
 
     init(session: AppSession) {
         self.session = session
         _profileModel = StateObject(wrappedValue: ProfileSetupViewModel(session: session))
+        _notificationModel = StateObject(wrappedValue: NotificationViewModel(session: session))
     }
 
     var body: some View {
@@ -48,6 +51,7 @@ struct HomePageView: View {
             .background(Color(.systemGray6).ignoresSafeArea())
             .task {
                 await profileModel.loadMyProfileIfNeeded()
+                await notificationModel.loadNotifications()
             }
             .fullScreenCover(isPresented: $isEventFormPresented) {
                 NavigationStack {
@@ -62,6 +66,9 @@ struct HomePageView: View {
                         }
                     )
                 }
+            }
+            .fullScreenCover(isPresented: $isNotificationsPresented) {
+                NotificationsListView(viewModel: notificationModel)
             }
     }
 
@@ -97,8 +104,12 @@ struct HomePageView: View {
                     isEventFormPresented = true
                 },
                 onNotificationsTap: {
-                    // TODO: notifications
-                }
+                    Task {
+                        await notificationModel.loadNotifications()
+                        isNotificationsPresented = true
+                    }
+                },
+                hasNotifications: notificationModel.hasNotifications
             )
 
         case .explore:
