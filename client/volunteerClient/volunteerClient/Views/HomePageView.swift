@@ -14,6 +14,7 @@ struct HomePageView: View {
     @State private var selectedTab: HomeTab = .map
     @State private var isEditingProfile = false
     @State private var isEventFormPresented = false
+    @State private var showModerationMessage = false
 
     init(session: AppSession) {
         self.session = session
@@ -29,6 +30,19 @@ struct HomePageView: View {
                 BottomTabBar(selectedTab: $selectedTab)
                     .ignoresSafeArea(.container, edges: .bottom)
             }
+            .overlay {
+                if showModerationMessage {
+                    Text("Отправлено на модерацию")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.black.opacity(0.85))
+                        )
+                }
+            }
             .ignoresSafeArea(.container, edges: .bottom)
             .ignoresSafeArea(.keyboard, edges: .bottom)
             .background(Color(.systemGray6).ignoresSafeArea())
@@ -37,9 +51,16 @@ struct HomePageView: View {
             }
             .fullScreenCover(isPresented: $isEventFormPresented) {
                 NavigationStack {
-                    EventFormView(session: session) {
-                        isEventFormPresented = false
-                    }
+                    EventFormView(
+                        session: session,
+                        onBack: {
+                            isEventFormPresented = false
+                        },
+                        onEventSubmitted: {
+                            isEventFormPresented = false
+                            presentModerationMessage()
+                        }
+                    )
                 }
             }
     }
@@ -86,6 +107,17 @@ struct HomePageView: View {
         case .events:
             MyEventsView {
                 isEventFormPresented = true
+            }
+        }
+    }
+
+    private func presentModerationMessage() {
+        showModerationMessage = true
+
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            await MainActor.run {
+                showModerationMessage = false
             }
         }
     }

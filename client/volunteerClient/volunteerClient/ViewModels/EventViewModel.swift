@@ -214,6 +214,10 @@ final class EventViewModel: ObservableObject {
         successMessage = nil
     }
 
+    func clearSuccessMessage() {
+        successMessage = nil
+    }
+
     func submit() async {
         clearMessages()
 
@@ -368,4 +372,6 @@ final class EventViewModel: ObservableObject {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
+
+    
 }

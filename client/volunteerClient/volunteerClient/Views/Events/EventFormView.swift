@@ -8,6 +8,7 @@ struct EventFormView: View {
     @StateObject private var viewModel: EventViewModel
 
     @State private var isLocationSheetPresented = false
+    @State private var isConfirmPresented = false
     @State private var activePicker: ActivePicker?
 
     @State private var draftStartDate = Date()
@@ -17,6 +18,7 @@ struct EventFormView: View {
     @State private var draftEndTime = Date()
 
     private let onBack: (() -> Void)?
+    private let onEventSubmitted: (() -> Void)?
 
     enum ActivePicker: String, Identifiable {
         case start
@@ -25,8 +27,13 @@ struct EventFormView: View {
         var id: String { rawValue }
     }
 
-    init(session: AppSession, onBack: (() -> Void)? = nil) {
+    init(
+        session: AppSession,
+        onBack: (() -> Void)? = nil,
+        onEventSubmitted: (() -> Void)? = nil
+    ) {
         self.onBack = onBack
+        self.onEventSubmitted = onEventSubmitted
         _viewModel = StateObject(wrappedValue: EventViewModel(session: session))
     }
 
@@ -162,9 +169,7 @@ struct EventFormView: View {
                     .padding(.top, 24)
 
                     Button {
-                        Task {
-                            await viewModel.submit()
-                        }
+                        proceedToConfirmation()
                     } label: {
                         ZStack {
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -173,7 +178,7 @@ struct EventFormView: View {
                             if viewModel.isSubmitting {
                                 ProgressView().tint(.white)
                             } else {
-                                Text("Создать событие")
+                                Text("Далее")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(.white)
                             }
@@ -276,6 +281,14 @@ struct EventFormView: View {
                 }
             }
         }
+        .navigationDestination(isPresented: $isConfirmPresented) {
+            EventConfirmView(
+                viewModel: viewModel,
+                onConfirmed: {
+                    handleEventSubmitted()
+                }
+            )
+        }
         .alert("Ошибка", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { _ in viewModel.errorMessage = nil }
@@ -284,21 +297,34 @@ struct EventFormView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
-        .alert("Готово", isPresented: Binding(
-            get: { viewModel.successMessage != nil },
-            set: { _ in viewModel.successMessage = nil }
-        )) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(viewModel.successMessage ?? "")
-        }
         .task {
             await viewModel.loadProfileContextIfNeeded()
         }
     }
 
+    private func proceedToConfirmation() {
+        viewModel.clearMessages()
+
+        guard viewModel.canSubmit else {
+            viewModel.errorMessage = "Заполните все обязательные поля"
+            return
+        }
+
+        isConfirmPresented = true
+    }
+
     private func handleBack() {
         if let onBack {
+            onBack()
+        } else {
+            dismiss()
+        }
+    }
+
+    private func handleEventSubmitted() {
+        if let onEventSubmitted {
+            onEventSubmitted()
+        } else if let onBack {
             onBack()
         } else {
             dismiss()
