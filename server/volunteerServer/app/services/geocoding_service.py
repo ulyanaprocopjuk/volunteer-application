@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -29,22 +29,72 @@ from app.schemas import ForwardGeocodeResponse, GeocodingSuggestionResponse, Rev
 from app.services.cache import TTLCacheStore
 from app.services.observability import logger, metrics
 
-COUNTRY_ALIASES: dict[str, tuple[str, str]] = {
+CIS_COUNTRIES: dict[str, str] = {
+    "AZ": "Азербайджан",
+    "AM": "Армения",
+    "BY": "Беларусь",
+    "KZ": "Казахстан",
+    "KG": "Кыргызстан",
+    "MD": "Молдова",
+    "RU": "Россия",
+    "TJ": "Таджикистан",
+    "TM": "Туркменистан",
+    "UZ": "Узбекистан",
+    "UA": "Украина",
+}
+
+CIS_COUNTRY_ALIASES: dict[str, tuple[str, str]] = {
+    "azerbaijan": ("AZ", "Азербайджан"),
+    "az": ("AZ", "Азербайджан"),
+    "азербайджан": ("AZ", "Азербайджан"),
+    "азербайджанская республика": ("AZ", "Азербайджан"),
+    "armenia": ("AM", "Армения"),
+    "am": ("AM", "Армения"),
+    "армения": ("AM", "Армения"),
+    "республика армения": ("AM", "Армения"),
     "belarus": ("BY", "Беларусь"),
     "by": ("BY", "Беларусь"),
     "беларусь": ("BY", "Беларусь"),
+    "белоруссия": ("BY", "Беларусь"),
     "беларуси": ("BY", "Беларусь"),
     "республика беларусь": ("BY", "Беларусь"),
-    "russia": ("RU", "Россия"),
-    "ru": ("RU", "Россия"),
-    "россия": ("RU", "Россия"),
-    "рф": ("RU", "Россия"),
-    "казахстан": ("KZ", "Казахстан"),
     "kazakhstan": ("KZ", "Казахстан"),
     "kz": ("KZ", "Казахстан"),
+    "казахстан": ("KZ", "Казахстан"),
+    "республика казахстан": ("KZ", "Казахстан"),
+    "kyrgyzstan": ("KG", "Кыргызстан"),
+    "kg": ("KG", "Кыргызстан"),
+    "киргизия": ("KG", "Кыргызстан"),
+    "кыргызстан": ("KG", "Кыргызстан"),
+    "кыргызская республика": ("KG", "Кыргызстан"),
+    "moldova": ("MD", "Молдова"),
+    "md": ("MD", "Молдова"),
+    "молдова": ("MD", "Молдова"),
+    "молдавия": ("MD", "Молдова"),
+    "республика молдова": ("MD", "Молдова"),
+    "russia": ("RU", "Россия"),
+    "russian federation": ("RU", "Россия"),
+    "ru": ("RU", "Россия"),
+    "россия": ("RU", "Россия"),
+    "российская федерация": ("RU", "Россия"),
+    "рф": ("RU", "Россия"),
+    "tajikistan": ("TJ", "Таджикистан"),
+    "tj": ("TJ", "Таджикистан"),
+    "таджикистан": ("TJ", "Таджикистан"),
+    "республика таджикистан": ("TJ", "Таджикистан"),
+    "turkmenistan": ("TM", "Туркменистан"),
+    "tm": ("TM", "Туркменистан"),
+    "туркменистан": ("TM", "Туркменистан"),
     "uzbekistan": ("UZ", "Узбекистан"),
-    "узбекистан": ("UZ", "Узбекистан"),
     "uz": ("UZ", "Узбекистан"),
+    "узбекистан": ("UZ", "Узбекистан"),
+    "республика узбекистан": ("UZ", "Узбекистан"),
+    "ukraine": ("UA", "Украина"),
+    "ua": ("UA", "Украина"),
+    "украина": ("UA", "Украина"),
+}
+
+NON_CIS_COUNTRY_ALIASES: dict[str, tuple[str, str]] = {
     "poland": ("PL", "Польша"),
     "польша": ("PL", "Польша"),
     "pl": ("PL", "Польша"),
@@ -74,13 +124,16 @@ COUNTRY_ALIASES: dict[str, tuple[str, str]] = {
     "usa": ("US", "США"),
     "us": ("US", "США"),
     "сша": ("US", "США"),
-    "ukraine": ("UA", "Украина"),
-    "украина": ("UA", "Украина"),
-    "ua": ("UA", "Украина"),
     "georgia": ("GE", "Грузия"),
     "грузия": ("GE", "Грузия"),
     "ge": ("GE", "Грузия"),
 }
+
+COUNTRY_ALIASES: dict[str, tuple[str, str]] = {
+    **CIS_COUNTRY_ALIASES,
+    **NON_CIS_COUNTRY_ALIASES,
+}
+FORWARD_GEOCODE_SUGGESTION_LIMIT = 3
 
 NORMALIZE_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 forward_cache: TTLCacheStore[ForwardGeocodeResponse] = TTLCacheStore()
@@ -94,6 +147,12 @@ class CountryContext:
     source: str
 
 
+@dataclass(frozen=True)
+class LocationContext:
+    city: str | None
+    country: CountryContext | None
+
+
 class GeocodingService:
     def forward_geocode(self, db: Session, user: User | None, query: str) -> ForwardGeocodeResponse:
         query = self._normalize_user_query(query)
@@ -101,9 +160,19 @@ class GeocodingService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Query must not be empty")
 
         explicit_country = self._detect_explicit_country(query)
-        user_country = self._resolve_user_country(db, user)
-        country_context = explicit_country or user_country or CountryContext(None, None, "none")
-        cache_key = f"forward:{self._cache_normalize(query)}:{country_context.code or '-'}"
+        if explicit_country is not None and not self._is_cis_country_context(explicit_country):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Search is available only for CIS countries",
+            )
+
+        user_location = self._resolve_user_location(db, user)
+        country_context = explicit_country or user_location.country or CountryContext(None, None, "cis")
+        cache_key = (
+            f"forward:{self._cache_normalize(query)}:"
+            f"{country_context.code or '-'}:"
+            f"{self._cache_normalize(user_location.city or '-')}"
+        )
         cached = forward_cache.get(cache_key)
         if cached is not None:
             metrics.inc("geocode.forward.cache_hit")
@@ -116,23 +185,46 @@ class GeocodingService:
             extra={"query": query, "country": country_context.code, "source": country_context.source},
         )
 
-        candidate_queries = self._build_forward_candidate_queries(query, country_context, explicit_country is not None)
         ranked_items: list[GeocodingSuggestionResponse] = []
         seen_ids: set[str] = set()
 
-        for idx, candidate_query in enumerate(candidate_queries):
+        if explicit_country is None:
+            raw_items = self._filter_cis_items(self._call_yandex_forward(query))
+            metrics.inc("geocode.forward.provider_calls")
+            query_city_items = self._query_city_items(raw_items, query)
+            if query_city_items:
+                self._append_unique_items(ranked_items, seen_ids, query_city_items)
+                candidate_queries = self._build_cis_country_candidate_queries(query)
+            else:
+                candidate_queries = self._build_forward_candidate_queries(
+                    query,
+                    country_context,
+                    has_explicit_country=False,
+                    user_city=user_location.city,
+                )
+        else:
+            candidate_queries = self._build_forward_candidate_queries(
+                query,
+                country_context,
+                has_explicit_country=True,
+            )
+
+        for candidate_query in candidate_queries:
+            if len(ranked_items) >= FORWARD_GEOCODE_SUGGESTION_LIMIT:
+                break
             items = self._call_yandex_forward(candidate_query)
             metrics.inc("geocode.forward.provider_calls")
-            for item in items:
-                if item.id in seen_ids:
-                    continue
-                seen_ids.add(item.id)
-                ranked_items.append(item)
-            if ranked_items and idx == 0:
-                break
+            self._append_unique_items(ranked_items, seen_ids, self._filter_cis_items(items))
 
-        ranked_items.sort(key=lambda item: self._score_forward_item(item, country_context, query), reverse=True)
-        response = ForwardGeocodeResponse(query=query, country=country_context.code, items=ranked_items[:YANDEX_GEOCODER_RESULTS_LIMIT])
+        ranked_items.sort(
+            key=lambda item: self._score_forward_item(item, country_context, query, user_location.city),
+            reverse=True,
+        )
+        response = ForwardGeocodeResponse(
+            query=query,
+            country=country_context.code,
+            items=ranked_items[:FORWARD_GEOCODE_SUGGESTION_LIMIT],
+        )
 
         ttl = FORWARD_GEOCODE_CACHE_TTL_SECONDS if response.items else GEOCODE_NEGATIVE_CACHE_TTL_SECONDS
         forward_cache.set(cache_key, response, ttl)
@@ -143,7 +235,7 @@ class GeocodingService:
 
         metrics.inc("geocode.forward.not_found")
         logger.info("geocode forward not found", extra={"query": query, "country": country_context.code})
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found in CIS countries")
 
     def reverse_geocode(self, latitude: float, longitude: float) -> ReverseGeocodeResponse:
         rounded_lat = round(latitude, REVERSE_GEOCODE_COORDINATE_PRECISION)
@@ -179,7 +271,19 @@ class GeocodingService:
             metrics.inc("geocode.reverse.not_found")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
 
-        response = ReverseGeocodeResponse(latitude=latitude, longitude=longitude, item=items[0])
+        item = items[0]
+        if not self._is_cis_country_name(item.country):
+            metrics.inc("geocode.reverse.outside_cis")
+            logger.info(
+                "geocode reverse outside cis",
+                extra={"latitude": latitude, "longitude": longitude, "country": item.country},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Location must be in a CIS country",
+            )
+
+        response = ReverseGeocodeResponse(latitude=latitude, longitude=longitude, item=item)
         reverse_cache.set(cache_key, response, REVERSE_GEOCODE_CACHE_TTL_SECONDS)
         metrics.inc("geocode.reverse.success")
         logger.info("geocode reverse success", extra={"latitude": latitude, "longitude": longitude})
@@ -188,30 +292,61 @@ class GeocodingService:
     def metrics_snapshot(self) -> dict[str, int]:
         return metrics.snapshot()
 
-    def _resolve_user_country(self, db: Session, user: User | None) -> CountryContext | None:
+    def _resolve_user_location(self, db: Session, user: User | None) -> LocationContext:
         if user is None:
-            return None
+            return LocationContext(city=None, country=None)
+
         profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
-        if profile is None or not profile.country:
-            return None
-        normalized = self._cache_normalize(profile.country)
-        mapped = COUNTRY_ALIASES.get(normalized)
-        if mapped:
-            return CountryContext(code=mapped[0], display_name=mapped[1], source="profile")
-        return CountryContext(code=None, display_name=profile.country.strip(), source="profile")
+        if profile is None:
+            return LocationContext(city=None, country=None)
+
+        country = self._country_context_from_value(profile.country, "profile") if profile.country else None
+        if country is not None and not self._is_cis_country_context(country):
+            return LocationContext(city=None, country=None)
+
+        city = profile.city.strip() if profile.city and profile.city.strip() else None
+        return LocationContext(city=city, country=country)
+
+    def _resolve_user_country(self, db: Session, user: User | None) -> CountryContext | None:
+        return self._resolve_user_location(db, user).country
 
     def _build_forward_candidate_queries(
         self,
         query: str,
         country_context: CountryContext,
         has_explicit_country: bool,
+        user_city: str | None = None,
     ) -> list[str]:
-        candidates = [query]
-        if country_context.display_name and not has_explicit_country:
-            candidates.insert(0, f"{query}, {country_context.display_name}")
+        candidates: list[str] = []
+        if has_explicit_country:
+            candidates.append(query)
+            if country_context.display_name:
+                candidates.append(f"{query}, {country_context.display_name}")
+            return self._dedupe_candidates(candidates)
+
+        if user_city and country_context.display_name and not self._query_mentions_text(query, user_city):
+            candidates.append(f"{query}, {user_city}, {country_context.display_name}")
+
+        if country_context.display_name:
+            candidates.append(f"{query}, {country_context.display_name}")
+
+        candidates.extend(self._build_cis_country_candidate_queries(query))
+        return self._dedupe_candidates(candidates)
+
+    def _build_cis_country_candidate_queries(self, query: str) -> list[str]:
+        return self._dedupe_candidates(f"{query}, {country}" for country in CIS_COUNTRIES.values())
+
+    @staticmethod
+    def _dedupe_candidates(candidates: Iterable[str]) -> list[str]:
         return list(dict.fromkeys(candidate.strip() for candidate in candidates if candidate.strip()))
 
-    def _score_forward_item(self, item: GeocodingSuggestionResponse, country_context: CountryContext, query: str) -> tuple[int, int, int, int]:
+    def _score_forward_item(
+        self,
+        item: GeocodingSuggestionResponse,
+        country_context: CountryContext,
+        query: str,
+        user_city: str | None = None,
+    ) -> tuple[int, int, int, int, int]:
         precision_rank = {
             "exact": 5,
             "number": 4,
@@ -219,15 +354,24 @@ class GeocodingService:
             "range": 2,
             "street": 1,
         }.get(item.precision, 0)
-        country_match = 1 if country_context.display_name and self._cache_normalize(item.country) == self._cache_normalize(country_context.display_name) else 0
-        query_city_match = 1 if item.city and self._cache_normalize(item.city) in self._cache_normalize(query) else 0
+        country_match = (
+            1
+            if country_context.display_name and self._same_country(item.country, country_context.display_name)
+            else 0
+        )
+        query_city_match = 1 if self._query_mentions_text(query, item.city) else 0
+        profile_city_match = (
+            1
+            if user_city and self._cache_normalize(item.city) == self._cache_normalize(user_city)
+            else 0
+        )
         subtitle_non_empty = 1 if item.subtitle else 0
-        return precision_rank, country_match, query_city_match, subtitle_non_empty
+        return query_city_match, profile_city_match, country_match, precision_rank, subtitle_non_empty
 
     def _call_yandex_forward(self, query: str) -> list[GeocodingSuggestionResponse]:
         payload = self._call_yandex({
             "geocode": query,
-            "results": str(YANDEX_GEOCODER_RESULTS_LIMIT),
+            "results": str(max(YANDEX_GEOCODER_RESULTS_LIMIT, FORWARD_GEOCODE_SUGGESTION_LIMIT)),
         })
         return self._parse_geo_objects(payload)
 
@@ -272,6 +416,57 @@ class GeocodingService:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Unable to reach geocoding provider",
             ) from exc
+
+    def _append_unique_items(
+        self,
+        target: list[GeocodingSuggestionResponse],
+        seen_ids: set[str],
+        items: Iterable[GeocodingSuggestionResponse],
+    ) -> None:
+        for item in items:
+            if item.id in seen_ids:
+                continue
+            seen_ids.add(item.id)
+            target.append(item)
+
+    def _filter_cis_items(self, items: Iterable[GeocodingSuggestionResponse]) -> list[GeocodingSuggestionResponse]:
+        return [item for item in items if self._is_cis_country_name(item.country)]
+
+    def _query_city_items(
+        self,
+        items: Iterable[GeocodingSuggestionResponse],
+        query: str,
+    ) -> list[GeocodingSuggestionResponse]:
+        return [item for item in items if self._query_mentions_text(query, item.city)]
+
+    def _country_context_from_value(self, value: str, source: str) -> CountryContext:
+        normalized = self._cache_normalize(value)
+        mapped = COUNTRY_ALIASES.get(normalized)
+        if mapped:
+            return CountryContext(code=mapped[0], display_name=mapped[1], source=source)
+        return CountryContext(code=None, display_name=value.strip(), source=source)
+
+    def _is_cis_country_context(self, country: CountryContext) -> bool:
+        return bool(country.code in CIS_COUNTRIES or self._is_cis_country_name(country.display_name or ""))
+
+    def _is_cis_country_name(self, value: str) -> bool:
+        normalized = self._cache_normalize(value)
+        mapped = CIS_COUNTRY_ALIASES.get(normalized)
+        return bool(mapped and mapped[0] in CIS_COUNTRIES)
+
+    def _same_country(self, left: str, right: str) -> bool:
+        left_context = self._country_context_from_value(left, "left")
+        right_context = self._country_context_from_value(right, "right")
+        if left_context.code and right_context.code:
+            return left_context.code == right_context.code
+        return self._cache_normalize(left) == self._cache_normalize(right)
+
+    def _query_mentions_text(self, query: str, value: str) -> bool:
+        normalized_value = self._cache_normalize(value)
+        if not normalized_value:
+            return False
+        normalized_query = f" {self._cache_normalize(query)} "
+        return f" {normalized_value} " in normalized_query
 
     def _parse_geo_objects(self, payload: dict[str, Any]) -> list[GeocodingSuggestionResponse]:
         collection = payload.get("response", {}).get("GeoObjectCollection", {})
