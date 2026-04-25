@@ -30,8 +30,9 @@ final class MyEventsViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let token = try await session.validAccessToken()
-            events = try await api.fetchMyEvents(token: token)
+            events = try await session.performAuthorizedRequest { token in
+                try await api.fetchMyEvents(token: token)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

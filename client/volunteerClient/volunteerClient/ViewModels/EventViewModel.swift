@@ -150,8 +150,9 @@ final class EventViewModel: ObservableObject {
         defer { isProfileContextLoading = false }
 
         do {
-            let token = try await session.validAccessToken()
-            let profile = try await profileAPI.fetchMyProfile(token: token)
+            let profile = try await session.performAuthorizedRequest { token in
+                try await profileAPI.fetchMyProfile(token: token)
+            }
             let country = canonicalCountry(from: profile.country)
             let city = canonicalCity(from: profile.city, in: country)
             let searchArea = CityDirectory.searchArea(for: country)
@@ -246,7 +247,6 @@ final class EventViewModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
-            let token = try await session.validAccessToken()
             let request = CreateEventRequest(
                 title: trim(eventTitle),
                 description: trim(eventDescription),
@@ -260,7 +260,9 @@ final class EventViewModel: ObservableObject {
                 volunteersNeeded: volunteersNeeded
             )
 
-            let response = try await eventAPI.createEvent(request, token: token)
+            let response = try await session.performAuthorizedRequest { token in
+                try await eventAPI.createEvent(request, token: token)
+            }
             successMessage = response.message ?? "Событие создано"
             resetFormKeepingContext()
             return response

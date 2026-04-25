@@ -85,10 +85,14 @@ final class GeocodingAPI: GeocodingAPIProtocol {
             throw AppNetworkError.invalidBaseURL
         }
 
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await NetworkRequestExecutor.data(from: url, session: session)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppNetworkError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw AppNetworkError.unauthorized
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
@@ -130,7 +134,7 @@ final class GeocodingAPI: GeocodingAPIProtocol {
         )
 
         return GeocodingSuggestion(
-            id: "\(item.latitude)|\(item.longitude)|\(fullAddress)",
+            id: "\(latitude)|\(longitude)|\(fullAddress)",
             title: title,
             subtitle: trim(item.subtitle ?? ""),
             fullAddress: fullAddress,

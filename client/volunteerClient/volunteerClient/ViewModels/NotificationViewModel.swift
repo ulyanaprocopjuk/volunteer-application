@@ -34,8 +34,9 @@ final class NotificationViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let token = try await session.validAccessToken()
-            notifications = try await api.fetchNotifications(token: token)
+            notifications = try await session.performAuthorizedRequest { token in
+                try await api.fetchNotifications(token: token)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -49,8 +50,9 @@ final class NotificationViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let token = try await session.validAccessToken()
-            try await api.clearNotifications(token: token)
+            try await session.performAuthorizedRequest { token in
+                try await api.clearNotifications(token: token)
+            }
             notifications = []
         } catch {
             errorMessage = error.localizedDescription

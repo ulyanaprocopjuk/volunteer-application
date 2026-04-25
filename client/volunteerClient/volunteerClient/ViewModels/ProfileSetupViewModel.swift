@@ -336,15 +336,18 @@ final class ProfileSetupViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let token = try await session.validAccessToken()
-            var savedAvatarURL = avatarURL
+            let savedAvatarURL = try await session.performAuthorizedRequest { token in
+                var savedAvatarURL = avatarURL
 
-            if let avatarData {
-                savedAvatarURL = try await api.uploadAvatar(data: avatarData, token: token)
+                if let avatarData {
+                    savedAvatarURL = try await api.uploadAvatar(data: avatarData, token: token)
+                }
+
+                let request = try buildRequest(avatarURL: savedAvatarURL)
+                try await api.saveProfile(request, token: token)
+
+                return savedAvatarURL
             }
-
-            let request = try buildRequest(avatarURL: savedAvatarURL)
-            try await api.saveProfile(request, token: token)
 
             avatarURL = savedAvatarURL
             self.avatarData = nil
@@ -373,8 +376,9 @@ final class ProfileSetupViewModel: ObservableObject {
         defer { isProfileLoading = false }
 
         do {
-            let token = try await session.validAccessToken()
-            let profile = try await api.fetchMyProfile(token: token)
+            let profile = try await session.performAuthorizedRequest { token in
+                try await api.fetchMyProfile(token: token)
+            }
             applyProfile(profile)
             hasLoadedProfile = true
         } catch {

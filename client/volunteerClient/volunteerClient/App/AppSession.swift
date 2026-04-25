@@ -49,11 +49,21 @@ final class AppSession: ObservableObject {
             let savedRefreshToken = try keychain.loadRefreshToken()
 
             if let savedAccessToken, !savedAccessToken.isEmpty, !jwtIsExpired(savedAccessToken) {
-                let user = try await authAPI.getCurrentUser(token: savedAccessToken)
-                token = savedAccessToken
-                currentUser = user
-                flow = .main
-                return
+                do {
+                    let user = try await authAPI.getCurrentUser(token: savedAccessToken)
+                    token = savedAccessToken
+                    currentUser = user
+                    flow = .main
+                    return
+                } catch {
+                    if let savedRefreshToken, !savedRefreshToken.isEmpty, error.isUnauthorizedResponse {
+                        _ = try await refreshAccessToken(using: savedRefreshToken)
+                        flow = .main
+                        return
+                    }
+
+                    throw error
+                }
             }
 
             if let savedRefreshToken, !savedRefreshToken.isEmpty {
@@ -89,8 +99,8 @@ final class AppSession: ObservableObject {
         }
     }
 
-    func validAccessToken() async throws -> String {
-        if let token, !token.isEmpty, !jwtIsExpired(token) {
+    func validAccessToken(forceRefresh: Bool = false) async throws -> String {
+        if !forceRefresh, let token, !token.isEmpty, !jwtIsExpired(token) {
             return token
         }
 
@@ -104,6 +114,33 @@ final class AppSession: ObservableObject {
         }
 
         return try await refreshAccessToken(using: savedRefreshToken)
+    }
+
+    func performAuthorizedRequest<T>(_ operation: (String) async throws -> T) async throws -> T {
+        let token = try await validAccessToken()
+
+        do {
+            return try await operation(token)
+        } catch {
+            guard error.isUnauthorizedResponse else {
+                throw error
+            }
+
+            let refreshedToken: String
+            do {
+                refreshedToken = try await validAccessToken(forceRefresh: true)
+            } catch {
+                if error.isUnauthorizedResponse {
+                    clearSessionState()
+                    globalError = error.localizedDescription
+                    flow = .auth
+                }
+
+                throw error
+            }
+
+            return try await operation(refreshedToken)
+        }
     }
 
     func completeProfileSetup() {

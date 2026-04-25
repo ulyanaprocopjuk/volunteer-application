@@ -31,7 +31,9 @@ final class ProfileAPI: ProfileAPIProtocol {
             data: data
         )
 
-        let (responseData, response) = try await session.upload(for: request, from: body)
+        request.httpBody = body
+
+        let (responseData, response) = try await NetworkRequestExecutor.data(for: request, session: session)
         try validate(response: response, data: responseData)
         let decoded = try JSONDecoder().decode(AvatarUploadResponse.self, from: responseData)
         return decoded.avatarURL
@@ -44,7 +46,7 @@ final class ProfileAPI: ProfileAPIProtocol {
         addAuthorization(token, to: &request)
         request.httpBody = try JSONEncoder().encode(requestModel)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
         try validate(response: response, data: data)
     }
 
@@ -53,7 +55,7 @@ final class ProfileAPI: ProfileAPIProtocol {
         request.httpMethod = "GET"
         addAuthorization(token, to: &request)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(ProfileResponse.self, from: data)
     }
@@ -66,6 +68,10 @@ final class ProfileAPI: ProfileAPIProtocol {
     private func validate(response: URLResponse, data: Data) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppNetworkError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw AppNetworkError.unauthorized
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {

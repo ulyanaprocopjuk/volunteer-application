@@ -128,7 +128,7 @@ struct EventFormView: View {
                                     .autocorrectionDisabled(true)
                                     .multilineTextAlignment(.center)
                                     .font(.system(size: 15))
-                                    .onChange(of: viewModel.volunteersManualInput) { newValue in
+                                    .onChange(of: viewModel.volunteersManualInput) { _, newValue in
                                         viewModel.updateVolunteersFromInput(newValue)
                                     }
 

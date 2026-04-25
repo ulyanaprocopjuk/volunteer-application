@@ -19,7 +19,7 @@ final class NotificationAPI: NotificationAPIProtocol {
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
         try validate(response: response, data: data)
 
         return try JSONDecoder().decode([AppNotificationItem].self, from: data)
@@ -30,13 +30,17 @@ final class NotificationAPI: NotificationAPIProtocol {
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
         try validate(response: response, data: data)
     }
 
     private func validate(response: URLResponse, data: Data) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppNetworkError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw AppNetworkError.unauthorized
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {

@@ -12,6 +12,7 @@ protocol AuthAPIProtocol {
 enum AppNetworkError: LocalizedError {
     case invalidBaseURL
     case invalidResponse
+    case unauthorized
     case server(String)
     case decoding
 
@@ -21,6 +22,8 @@ enum AppNetworkError: LocalizedError {
             return "Некорректный base URL"
         case .invalidResponse:
             return "Некорректный ответ сервера"
+        case .unauthorized:
+            return "Сессия истекла. Повторите вход."
         case .server(let message):
             return message
         case .decoding:
@@ -132,10 +135,14 @@ final class AuthAPI: AuthAPIProtocol {
 
         request.httpBody = body
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppNetworkError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw AppNetworkError.unauthorized
         }
 
         guard (200..<300).contains(httpResponse.statusCode) else {

@@ -25,7 +25,7 @@ final class EventAPI: EventAPIProtocol {
 
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
-        let (data, response) = try await session.data(for: urlRequest)
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(EventResponse.self, from: data)
     }
@@ -38,7 +38,7 @@ final class EventAPI: EventAPIProtocol {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await session.data(for: urlRequest)
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode([EventResponse].self, from: data)
     }
@@ -46,6 +46,10 @@ final class EventAPI: EventAPIProtocol {
     private func validate(response: URLResponse, data: Data) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw EventAPIError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw EventAPIError.unauthorized
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
@@ -62,12 +66,15 @@ private struct APIErrorMessage: Decodable {
 
 enum EventAPIError: LocalizedError {
     case invalidResponse
+    case unauthorized
     case server(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
             return "Некорректный ответ сервера"
+        case .unauthorized:
+            return "Сессия истекла. Повторите вход."
         case .server(let message):
             return message
         }
