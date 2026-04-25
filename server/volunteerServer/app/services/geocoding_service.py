@@ -187,39 +187,52 @@ class GeocodingService:
 
         ranked_items: list[GeocodingSuggestionResponse] = []
         seen_ids: set[str] = set()
+        candidate_query_stages: list[list[str]] = []
 
         if explicit_country is None:
-            raw_items = self._filter_cis_items(self._call_yandex_forward(query))
+            raw_items = self._filter_relevant_forward_items(
+                self._filter_cis_items(self._call_yandex_forward(query)),
+                query,
+            )
             metrics.inc("geocode.forward.provider_calls")
             query_city_items = self._query_city_items(raw_items, query)
             if query_city_items:
-                self._append_unique_items(ranked_items, seen_ids, query_city_items)
-                candidate_queries = self._build_cis_country_candidate_queries(query)
+                self._append_unique_items(
+                    ranked_items,
+                    seen_ids,
+                    self._rank_forward_items(query_city_items, country_context, query, user_location.city),
+                )
+                candidate_query_stages.append(self._build_cis_country_candidate_queries(query))
             else:
-                candidate_queries = self._build_forward_candidate_queries(
+                candidate_query_stages = self._build_forward_candidate_query_stages(
                     query,
                     country_context,
                     has_explicit_country=False,
                     user_city=user_location.city,
                 )
         else:
-            candidate_queries = self._build_forward_candidate_queries(
+            candidate_query_stages = self._build_forward_candidate_query_stages(
                 query,
                 country_context,
                 has_explicit_country=True,
             )
 
-        for candidate_query in candidate_queries:
+        for candidate_queries in candidate_query_stages:
             if len(ranked_items) >= FORWARD_GEOCODE_SUGGESTION_LIMIT:
                 break
-            items = self._call_yandex_forward(candidate_query)
-            metrics.inc("geocode.forward.provider_calls")
-            self._append_unique_items(ranked_items, seen_ids, self._filter_cis_items(items))
+            stage_items: list[GeocodingSuggestionResponse] = []
+            for candidate_query in candidate_queries:
+                items = self._call_yandex_forward(candidate_query)
+                metrics.inc("geocode.forward.provider_calls")
+                stage_items.extend(self._filter_cis_items(items))
 
-        ranked_items.sort(
-            key=lambda item: self._score_forward_item(item, country_context, query, user_location.city),
-            reverse=True,
-        )
+            stage_items = self._filter_relevant_forward_items(stage_items, query)
+            self._append_unique_items(
+                ranked_items,
+                seen_ids,
+                self._rank_forward_items(stage_items, country_context, query, user_location.city),
+            )
+
         response = ForwardGeocodeResponse(
             query=query,
             country=country_context.code,
@@ -333,6 +346,34 @@ class GeocodingService:
         candidates.extend(self._build_cis_country_candidate_queries(query))
         return self._dedupe_candidates(candidates)
 
+    def _build_forward_candidate_query_stages(
+        self,
+        query: str,
+        country_context: CountryContext,
+        has_explicit_country: bool,
+        user_city: str | None = None,
+    ) -> list[list[str]]:
+        if has_explicit_country:
+            return [
+                self._dedupe_candidates(
+                    [
+                        query,
+                        f"{query}, {country_context.display_name}" if country_context.display_name else "",
+                    ]
+                )
+            ]
+
+        stages: list[list[str]] = []
+
+        if user_city and country_context.display_name and not self._query_mentions_text(query, user_city):
+            stages.append([f"{query}, {user_city}, {country_context.display_name}"])
+
+        if country_context.display_name:
+            stages.append([f"{query}, {country_context.display_name}"])
+
+        stages.append(self._build_cis_country_candidate_queries(query))
+        return [self._dedupe_candidates(stage) for stage in stages if stage]
+
     def _build_cis_country_candidate_queries(self, query: str) -> list[str]:
         return self._dedupe_candidates(f"{query}, {country}" for country in CIS_COUNTRIES.values())
 
@@ -367,6 +408,19 @@ class GeocodingService:
         )
         subtitle_non_empty = 1 if item.subtitle else 0
         return query_city_match, profile_city_match, country_match, precision_rank, subtitle_non_empty
+
+    def _rank_forward_items(
+        self,
+        items: Iterable[GeocodingSuggestionResponse],
+        country_context: CountryContext,
+        query: str,
+        user_city: str | None = None,
+    ) -> list[GeocodingSuggestionResponse]:
+        return sorted(
+            items,
+            key=lambda item: self._score_forward_item(item, country_context, query, user_city),
+            reverse=True,
+        )
 
     def _call_yandex_forward(self, query: str) -> list[GeocodingSuggestionResponse]:
         payload = self._call_yandex({
@@ -432,6 +486,13 @@ class GeocodingService:
     def _filter_cis_items(self, items: Iterable[GeocodingSuggestionResponse]) -> list[GeocodingSuggestionResponse]:
         return [item for item in items if self._is_cis_country_name(item.country)]
 
+    def _filter_relevant_forward_items(
+        self,
+        items: Iterable[GeocodingSuggestionResponse],
+        query: str,
+    ) -> list[GeocodingSuggestionResponse]:
+        return [item for item in items if self._item_matches_query(item, query)]
+
     def _query_city_items(
         self,
         items: Iterable[GeocodingSuggestionResponse],
@@ -467,6 +528,35 @@ class GeocodingService:
             return False
         normalized_query = f" {self._cache_normalize(query)} "
         return f" {normalized_value} " in normalized_query
+
+    def _item_matches_query(self, item: GeocodingSuggestionResponse, query: str) -> bool:
+        tokens = self._cache_normalize(query).split()
+        if not tokens:
+            return True
+
+        haystack = self._cache_normalize(
+            " ".join(
+                [
+                    item.title,
+                    item.subtitle,
+                    item.fullAddress,
+                    item.city,
+                    item.country,
+                ]
+            )
+        )
+        words = haystack.split()
+
+        for token in tokens:
+            if len(token) <= 2:
+                if not any(word.startswith(token) for word in words):
+                    return False
+                continue
+
+            if token not in haystack and not any(word.startswith(token) for word in words):
+                return False
+
+        return True
 
     def _parse_geo_objects(self, payload: dict[str, Any]) -> list[GeocodingSuggestionResponse]:
         collection = payload.get("response", {}).get("GeoObjectCollection", {})

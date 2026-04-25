@@ -394,6 +394,7 @@ class TelegramAdminBot:
 
         except Exception:
             db.rollback()
+            self._release_event_lock(event_id, admin_telegram_id)
             logger.exception("Failed to reject Telegram event")
             await self._safe_answer_callback(callback_id, "Ошибка сервера")
             if chat_id is not None:
@@ -401,6 +402,33 @@ class TelegramAdminBot:
 
         finally:
             db.close()
+
+    async def _send_reject_confirmation(
+        self,
+        chat_id: int | str,
+        event_id: str,
+        reason: str,
+    ) -> None:
+        reply_markup = {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "✅ Отклонить",
+                        "callback_data": f"confirm_reject:{event_id}",
+                    },
+                    {
+                        "text": "↩️ Отмена",
+                        "callback_data": f"cancel_reject:{event_id}",
+                    },
+                ]
+            ]
+        }
+        text = (
+            "Подтвердите отклонение события.\n\n"
+            f"<b>Причина:</b> {html.escape(reason)}"
+        )
+
+        await self._safe_send_message_with_markup(chat_id, text, reply_markup)
 
     async def _remove_buttons_for_event(
         self,
@@ -475,15 +503,12 @@ class TelegramAdminBot:
             }
 
             if not self._try_lock_event(event_id, user_id):
+                self._pending_reject_reasons.pop(user_id, None)
+                self._pending_reject_confirmations.pop(user_id, None)
                 await self._safe_send_message(chat_id, "Событие уже обрабатывает другой админ.")
                 return
 
-            await self._reject_event(
-                event_id=event_id,
-                reason=reason,
-                admin_telegram_id=user_id,
-                chat_id=chat_id,
-            )
+            await self._send_reject_confirmation(chat_id, event_id, reason)
 
             return
 
@@ -594,6 +619,17 @@ class TelegramAdminBot:
         except Exception:
             logger.exception("Failed to send Telegram message to %s", chat_id)
 
+    async def _safe_send_message_with_markup(
+        self,
+        chat_id: int | str,
+        text: str,
+        reply_markup: dict[str, Any],
+    ) -> None:
+        try:
+            await asyncio.to_thread(self._send_message, chat_id, text, reply_markup)
+        except Exception:
+            logger.exception("Failed to send Telegram message to %s", chat_id)
+
     async def _safe_api(self, method: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         try:
             return await asyncio.to_thread(self._api, method, payload)
@@ -647,15 +683,21 @@ class TelegramAdminBot:
             },
         )
 
-    def _send_message(self, chat_id: int | str, text: str) -> None:
-        self._api(
-            "sendMessage",
-            {
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-            },
-        )
+    def _send_message(
+        self,
+        chat_id: int | str,
+        text: str,
+        reply_markup: dict[str, Any] | None = None,
+    ) -> None:
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
+
+        self._api("sendMessage", payload)
 
     @staticmethod
     def _safe(value: Any) -> str:

@@ -515,6 +515,7 @@ private struct EventDateTimePickerSheet: View {
                     .datePickerStyle(.wheel)
                 }
             }
+            .environment(\.locale, Locale(identifier: "ru_RU"))
             .frame(maxWidth: .infinity)
             .frame(height: 216)
             .clipped()
@@ -626,6 +627,8 @@ private struct EventLocationPickerSheet: View {
     @FocusState private var isSearchFieldFocused: Bool
 
     @StateObject private var viewModel: EventLocationPickerViewModel
+    @State private var zoomInTrigger = 0
+    @State private var zoomOutTrigger = 0
 
     init(
         context: EventLocationContext,
@@ -688,9 +691,11 @@ private struct EventLocationPickerSheet: View {
                         .padding(.horizontal, 16)
                     }
 
-                    ZStack {
+                    ZStack(alignment: .trailing) {
                         EventMapView(
-                            cameraCoordinate: viewModel.cameraCoordinate
+                            cameraCoordinate: viewModel.cameraCoordinate,
+                            zoomInTrigger: zoomInTrigger,
+                            zoomOutTrigger: zoomOutTrigger
                         ) { coordinate in
                             Task {
                                 await viewModel.handleMapTap(coordinate)
@@ -705,6 +710,18 @@ private struct EventLocationPickerSheet: View {
                             .foregroundStyle(Color(red: 44/255, green: 67/255, blue: 102/255))
                             .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
                             .offset(y: -14)
+                            .allowsHitTesting(false)
+
+                        VStack(spacing: 8) {
+                            mapZoomButton(systemImage: "plus") {
+                                zoomInTrigger += 1
+                            }
+
+                            mapZoomButton(systemImage: "minus") {
+                                zoomOutTrigger += 1
+                            }
+                        }
+                        .padding(12)
 
                         if viewModel.isSearching || viewModel.isInitialLocationLoading {
                             ProgressView()
@@ -784,6 +801,21 @@ private struct EventLocationPickerSheet: View {
                 await viewModel.loadInitialLocationIfNeeded()
             }
         }
+    }
+
+    private func mapZoomButton(systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.black.opacity(0.78))
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.white.opacity(0.94))
+                )
+                .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
+        }
+        .buttonStyle(.plain)
     }
 
     private var searchBar: some View {

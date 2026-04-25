@@ -51,5 +51,40 @@ class TelegramAdminBotTests(unittest.TestCase):
         self.assertEqual(error.description, "Bad Request: query is too old")
 
 
+class TelegramAdminBotAsyncTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.bot = TelegramAdminBot()
+        self.bot.admin_ids = {100}
+
+    async def test_reject_reason_waits_for_confirmation(self):
+        confirmations = []
+        rejects = []
+
+        async def fake_send_confirmation(chat_id, event_id, reason):
+            confirmations.append((chat_id, event_id, reason))
+
+        async def fake_reject_event(**kwargs):
+            rejects.append(kwargs)
+
+        self.bot._pending_reject_reasons[100] = "event-1"
+        self.bot._send_reject_confirmation = fake_send_confirmation
+        self.bot._reject_event = fake_reject_event
+
+        await self.bot._handle_message(
+            {
+                "chat": {"id": 100},
+                "from": {"id": 100},
+                "text": "Не подходит дата",
+            }
+        )
+
+        self.assertEqual(confirmations, [(100, "event-1", "Не подходит дата")])
+        self.assertEqual(rejects, [])
+        self.assertEqual(
+            self.bot._pending_reject_confirmations[100],
+            {"event_id": "event-1", "reason": "Не подходит дата"},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

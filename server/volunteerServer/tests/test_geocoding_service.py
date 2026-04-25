@@ -6,6 +6,7 @@ from app.schemas import GeocodingSuggestionResponse
 from app.services.geocoding_service import (
     CountryContext,
     GeocodingService,
+    LocationContext,
     forward_cache,
     reverse_cache,
 )
@@ -17,12 +18,14 @@ def make_item(
     country: str = "Беларусь",
     city: str = "Минск",
     precision: str = "exact",
+    title: str | None = None,
+    full_address: str | None = None,
 ) -> GeocodingSuggestionResponse:
     return GeocodingSuggestionResponse(
         id=item_id,
-        title=f"{city} location",
+        title=title or f"{city} location",
         subtitle=city,
-        fullAddress=f"{city}, {country}",
+        fullAddress=full_address or f"{city}, {country}",
         latitude=53.9,
         longitude=27.56,
         precision=precision,
@@ -61,10 +64,10 @@ class GeocodingServiceTests(unittest.TestCase):
             if query == "Ленина":
                 return [make_item("pl-raw", country="Польша", city="Варшава")]
             return [
-                make_item("by-1"),
-                make_item("by-2"),
-                make_item("ru-1", country="Россия", city="Москва"),
-                make_item("pl-1", country="Польша", city="Варшава"),
+                make_item("by-1", title="улица Ленина", full_address="улица Ленина, Минск, Беларусь"),
+                make_item("by-2", title="улица Ленина", full_address="улица Ленина, Минск, Беларусь"),
+                make_item("ru-1", country="Россия", city="Москва", title="улица Ленина", full_address="улица Ленина, Москва, Россия"),
+                make_item("pl-1", country="Польша", city="Варшава", title="улица Ленина", full_address="улица Ленина, Варшава, Польша"),
             ]
 
         self.service._call_yandex_forward = fake_forward
@@ -73,6 +76,44 @@ class GeocodingServiceTests(unittest.TestCase):
 
         self.assertEqual(len(response.items), 3)
         self.assertEqual([item.country for item in response.items], ["Беларусь", "Беларусь", "Россия"])
+
+    def test_short_query_prefers_profile_city_and_filters_unrelated_countries(self):
+        context = CountryContext(code="BY", display_name="Беларусь", source="profile")
+        self.service._resolve_user_location = lambda db, user: LocationContext(city="Минск", country=context)
+
+        def fake_forward(query: str) -> list[GeocodingSuggestionResponse]:
+            if query == "пи":
+                return [
+                    make_item("az-raw", country="Азербайджан", city="Баку", title="Баку", full_address="Баку, Азербайджан"),
+                    make_item("am-raw", country="Армения", city="Ереван", title="Ереван", full_address="Ереван, Армения"),
+                ]
+            if query == "пи, Минск, Беларусь":
+                return [
+                    make_item(
+                        "minsk-pi",
+                        title="улица Пионерская",
+                        full_address="улица Пионерская, Минск, Беларусь",
+                    )
+                ]
+            if query == "пи, Беларусь":
+                return [
+                    make_item(
+                        "pinsk",
+                        city="Пинск",
+                        title="Пинск",
+                        full_address="Пинск, Беларусь",
+                    )
+                ]
+            return [
+                make_item("az", country="Азербайджан", city="Баку", title="Баку", full_address="Баку, Азербайджан"),
+                make_item("am", country="Армения", city="Ереван", title="Ереван", full_address="Ереван, Армения"),
+            ]
+
+        self.service._call_yandex_forward = fake_forward
+
+        response = self.service.forward_geocode(None, object(), "пи")
+
+        self.assertEqual([item.id for item in response.items], ["minsk-pi", "pinsk"])
 
     def test_query_city_scores_above_profile_city(self):
         context = CountryContext(code="BY", display_name="Беларусь", source="profile")
