@@ -218,12 +218,12 @@ final class EventViewModel: ObservableObject {
         successMessage = nil
     }
 
-    func submit() async {
+    func submit() async -> EventResponse? {
         clearMessages()
 
         guard canSubmit else {
             errorMessage = "Заполните все обязательные поля"
-            return
+            return nil
         }
 
         guard let selectedCoordinate,
@@ -232,14 +232,14 @@ final class EventViewModel: ObservableObject {
               !country.isEmpty,
               !city.isEmpty else {
             errorMessage = "Не удалось определить местоположение события"
-            return
+            return nil
         }
 
         guard let volunteersNeeded = Int(volunteersManualInput),
               let startDate,
               let startTime else {
             errorMessage = "Заполните все обязательные поля"
-            return
+            return nil
         }
 
         isSubmitting = true
@@ -263,8 +263,10 @@ final class EventViewModel: ObservableObject {
             let response = try await eventAPI.createEvent(request, token: token)
             successMessage = response.message ?? "Событие создано"
             resetFormKeepingContext()
+            return response
         } catch {
             errorMessage = error.localizedDescription
+            return nil
         }
     }
 

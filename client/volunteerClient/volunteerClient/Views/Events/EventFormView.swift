@@ -18,7 +18,7 @@ struct EventFormView: View {
     @State private var draftEndTime = Date()
 
     private let onBack: (() -> Void)?
-    private let onEventSubmitted: (() -> Void)?
+    private let onEventSubmitted: ((EventResponse) -> Void)?
 
     enum ActivePicker: String, Identifiable {
         case start
@@ -30,7 +30,7 @@ struct EventFormView: View {
     init(
         session: AppSession,
         onBack: (() -> Void)? = nil,
-        onEventSubmitted: (() -> Void)? = nil
+        onEventSubmitted: ((EventResponse) -> Void)? = nil
     ) {
         self.onBack = onBack
         self.onEventSubmitted = onEventSubmitted
@@ -284,8 +284,8 @@ struct EventFormView: View {
         .navigationDestination(isPresented: $isConfirmPresented) {
             EventConfirmView(
                 viewModel: viewModel,
-                onConfirmed: {
-                    handleEventSubmitted()
+                onConfirmed: { response in
+                    handleEventSubmitted(response)
                 }
             )
         }
@@ -321,9 +321,9 @@ struct EventFormView: View {
         }
     }
 
-    private func handleEventSubmitted() {
+    private func handleEventSubmitted(_ event: EventResponse) {
         if let onEventSubmitted {
-            onEventSubmitted()
+            onEventSubmitted(event)
         } else if let onBack {
             onBack()
         } else {

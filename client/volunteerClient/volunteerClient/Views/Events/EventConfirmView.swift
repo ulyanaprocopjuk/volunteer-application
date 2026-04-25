@@ -3,7 +3,7 @@ import SwiftUI
 struct EventConfirmView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: EventViewModel
-    let onConfirmed: (() -> Void)?
+    let onConfirmed: ((EventResponse) -> Void)?
 
     @State private var createdAt = Date()
 
@@ -187,18 +187,15 @@ struct EventConfirmView: View {
     }
 
     private func confirmEvent() async {
-        await viewModel.submit()
+        guard let response = await viewModel.submit(),
+              viewModel.errorMessage == nil else { return }
 
-        guard viewModel.errorMessage == nil else { return }
+        viewModel.clearSuccessMessage()
 
-        if viewModel.successMessage != nil {
-            viewModel.clearSuccessMessage()
-
-            if let onConfirmed {
-                onConfirmed()
-            } else {
-                dismiss()
-            }
+        if let onConfirmed {
+            onConfirmed(response)
+        } else {
+            dismiss()
         }
     }
 

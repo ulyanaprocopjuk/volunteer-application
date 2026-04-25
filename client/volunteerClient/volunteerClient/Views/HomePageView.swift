@@ -11,6 +11,7 @@ struct HomePageView: View {
     @ObservedObject var session: AppSession
     @StateObject private var profileModel: ProfileSetupViewModel
     @StateObject private var notificationModel: NotificationViewModel
+    @StateObject private var myEventsModel: MyEventsViewModel
 
     @State private var selectedTab: HomeTab = .map
     @State private var isEditingProfile = false
@@ -22,6 +23,7 @@ struct HomePageView: View {
         self.session = session
         _profileModel = StateObject(wrappedValue: ProfileSetupViewModel(session: session))
         _notificationModel = StateObject(wrappedValue: NotificationViewModel(session: session))
+        _myEventsModel = StateObject(wrappedValue: MyEventsViewModel(session: session))
     }
 
     var body: some View {
@@ -52,6 +54,7 @@ struct HomePageView: View {
             .task {
                 await profileModel.loadMyProfileIfNeeded()
                 await notificationModel.loadNotifications()
+                await myEventsModel.loadMyEvents()
             }
             .fullScreenCover(isPresented: $isEventFormPresented) {
                 NavigationStack {
@@ -60,7 +63,8 @@ struct HomePageView: View {
                         onBack: {
                             isEventFormPresented = false
                         },
-                        onEventSubmitted: {
+                        onEventSubmitted: { event in
+                            myEventsModel.prependOrUpdate(event)
                             isEventFormPresented = false
                             presentModerationMessage()
                         }
@@ -116,7 +120,7 @@ struct HomePageView: View {
             SearchEventsView()
 
         case .events:
-            MyEventsView {
+            MyEventsView(viewModel: myEventsModel) {
                 isEventFormPresented = true
             }
         }

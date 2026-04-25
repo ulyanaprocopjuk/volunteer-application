@@ -2,6 +2,7 @@ import Foundation
 
 protocol EventAPIProtocol {
     func createEvent(_ request: CreateEventRequest, token: String?) async throws -> EventResponse
+    func fetchMyEvents(token: String?) async throws -> [EventResponse]
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -27,6 +28,19 @@ final class EventAPI: EventAPIProtocol {
         let (data, response) = try await session.data(for: urlRequest)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    func fetchMyEvents(token: String?) async throws -> [EventResponse] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/my"))
+        urlRequest.httpMethod = "GET"
+
+        if let token, !token.isEmpty {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await session.data(for: urlRequest)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([EventResponse].self, from: data)
     }
 
     private func validate(response: URLResponse, data: Data) throws {
