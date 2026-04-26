@@ -11,18 +11,7 @@ struct EventSummaryCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 14) {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white)
-                    .frame(width: 64, height: 64)
-                    .overlay(
-                        Image(systemName: "calendar")
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.black.opacity(0.15), lineWidth: 1)
-                    )
+                eventThumbnail
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text(event.title)
@@ -96,6 +85,44 @@ struct EventSummaryCard: View {
         }
     }
 
+    private var eventThumbnail: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white)
+
+            if let photoURL {
+                AsyncImage(url: photoURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .empty:
+                        ProgressView()
+                    case .failure:
+                        placeholderThumbnail
+                    @unknown default:
+                        placeholderThumbnail
+                    }
+                }
+            } else {
+                placeholderThumbnail
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.black.opacity(0.15), lineWidth: 1)
+        )
+    }
+
+    private var placeholderThumbnail: some View {
+        Image(systemName: "calendar")
+            .font(.system(size: 24, weight: .semibold))
+            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+    }
+
     private var statusText: String {
         switch moderationStatus {
         case .pending:
@@ -127,6 +154,24 @@ struct EventSummaryCard: View {
         }
 
         return location
+    }
+
+    private var photoURL: URL? {
+        guard let photoURL = event.photoURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !photoURL.isEmpty else {
+            return nil
+        }
+
+        if let url = URL(string: photoURL), url.scheme != nil {
+            return url
+        }
+
+        guard let baseURL = URL(string: AppConfig.baseURLString) else {
+            return nil
+        }
+
+        let path = photoURL.hasPrefix("/") ? String(photoURL.dropFirst()) : photoURL
+        return baseURL.appendingPathComponent(path)
     }
 
     private var dateRangeText: String {

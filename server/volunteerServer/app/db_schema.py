@@ -45,6 +45,8 @@ def ensure_database_schema(engine: Engine) -> None:
 
     if "status" not in columns:
         statements.append("ALTER TABLE events ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'approved'")
+    if "photo_url" not in columns:
+        statements.append("ALTER TABLE events ADD COLUMN photo_url VARCHAR(500) NULL")
     if "reviewed_by" not in columns:
         statements.append("ALTER TABLE events ADD COLUMN reviewed_by INTEGER NULL")
     if "reviewed_at" not in columns:

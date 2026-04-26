@@ -64,6 +64,7 @@ struct EventDetailsView: View {
             country: "Беларусь",
             city: "Минск",
             locationName: "ул. Аэродромная, Минск",
+            photoURL: nil,
             latitude: 53.9,
             longitude: 27.56,
             startsAt: "2026-04-24T10:00:00Z",

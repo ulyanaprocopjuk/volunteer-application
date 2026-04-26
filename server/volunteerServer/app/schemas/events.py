@@ -9,6 +9,7 @@ class CreateEventRequest(BaseModel):
     country: str = Field(min_length=1, max_length=100)
     city: str = Field(min_length=1, max_length=100)
     location_name: str = Field(min_length=1, max_length=255, alias="locationName")
+    photo_url: str | None = Field(default=None, max_length=500, alias="photoURL")
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     starts_at: datetime = Field(alias="startsAt")
@@ -22,6 +23,14 @@ class CreateEventRequest(BaseModel):
         if not value:
             raise ValueError("Value must not be empty")
         return value
+
+    @field_validator("photo_url")
+    @classmethod
+    def strip_optional_photo_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
     @model_validator(mode="after")
     def validate_dates(self):
@@ -39,6 +48,7 @@ class EventResponse(BaseModel):
     country: str
     city: str
     location_name: str = Field(alias="locationName")
+    photo_url: str | None = Field(default=None, alias="photoURL")
     latitude: float
     longitude: float
     starts_at: datetime = Field(alias="startsAt")

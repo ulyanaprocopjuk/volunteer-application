@@ -79,6 +79,9 @@ struct EventConfirmView: View {
 
     private var eventCard: some View {
         VStack(alignment: .leading, spacing: 0) {
+            eventPhotoView
+                .padding(.bottom, viewModel.eventPhotoImage == nil ? 0 : 18)
+
             topBlock
 
             if !displayDescription.isEmpty {
@@ -94,6 +97,18 @@ struct EventConfirmView: View {
 
             bottomMetaBlock
                 .padding(.top, 36)
+        }
+    }
+
+    @ViewBuilder
+    private var eventPhotoView: some View {
+        if let image = viewModel.eventPhotoImage {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .frame(height: 190)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 

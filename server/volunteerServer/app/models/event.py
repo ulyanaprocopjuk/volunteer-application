@@ -27,6 +27,7 @@ class Event(Base):
     country: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     city: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     location_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     latitude: Mapped[float] = mapped_column(Numeric(10, 7), nullable=False)
     longitude: Mapped[float] = mapped_column(Numeric(10, 7), nullable=False)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)

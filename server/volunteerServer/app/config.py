@@ -10,6 +10,7 @@ DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", "Admin12345!")
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 AVATAR_DIR = UPLOAD_DIR / "avatars"
+EVENT_PHOTO_DIR = UPLOAD_DIR / "event_photos"
 
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg": ".jpg",

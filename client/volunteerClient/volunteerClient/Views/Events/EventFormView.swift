@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import PhotosUI
 
 struct EventFormView: View {
     @Environment(\.dismiss) private var dismiss
@@ -10,6 +11,7 @@ struct EventFormView: View {
     @State private var isLocationSheetPresented = false
     @State private var isConfirmPresented = false
     @State private var activePicker: ActivePicker?
+    @State private var selectedPhotoItem: PhotosPickerItem?
 
     @State private var draftStartDate = Date()
     @State private var draftStartTime = Date()
@@ -61,6 +63,8 @@ struct EventFormView: View {
                             text: $viewModel.eventDescription,
                             placeholder: "Введите описание события"
                         )
+
+                        eventPhotoSection
 
                         EventPickerField(
                             title: "Местоположение",
@@ -300,6 +304,50 @@ struct EventFormView: View {
         .task {
             await viewModel.loadProfileContextIfNeeded()
         }
+        .task(id: selectedPhotoItem) {
+            await loadPhoto()
+        }
+    }
+
+    @MainActor
+    private var eventPhotoSection: some View {
+        let photoImage = viewModel.eventPhotoImage
+
+        return VStack(alignment: .leading, spacing: 10) {
+            EventFieldTitle(title: "Фотография события")
+
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(.systemGray6))
+                        .frame(height: 168)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.gray.opacity(0.35), lineWidth: 1)
+                        )
+
+                    if let image = photoImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 168)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    } else {
+                        VStack(spacing: 10) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 28, weight: .semibold))
+                                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                            Text("Добавить фото")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.black.opacity(0.72))
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func proceedToConfirmation() {
@@ -328,6 +376,22 @@ struct EventFormView: View {
             onBack()
         } else {
             dismiss()
+        }
+    }
+
+    private func loadPhoto() async {
+        guard let selectedPhotoItem else { return }
+
+        do {
+            guard let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                viewModel.errorMessage = "Не удалось загрузить фото"
+                return
+            }
+
+            viewModel.setEventPhoto(image)
+        } catch {
+            viewModel.errorMessage = "Не удалось открыть фото"
         }
     }
 }

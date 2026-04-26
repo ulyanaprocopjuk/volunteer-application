@@ -30,6 +30,7 @@ class EventService:
             country=payload.country,
             city=payload.city,
             location_name=payload.location_name,
+            photo_url=payload.photo_url,
             latitude=payload.latitude,
             longitude=payload.longitude,
             starts_at=payload.starts_at,

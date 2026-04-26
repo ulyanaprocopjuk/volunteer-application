@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.config import AVATAR_DIR, UPLOAD_DIR
+from app.config import AVATAR_DIR, EVENT_PHOTO_DIR, UPLOAD_DIR
 from app.db import Base, SessionLocal, engine
 from app.db_schema import ensure_database_schema
 from app.routers import (
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    EVENT_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     ensure_database_schema(engine)
 

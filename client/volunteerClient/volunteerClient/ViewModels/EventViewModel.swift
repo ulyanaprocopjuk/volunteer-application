@@ -1,6 +1,7 @@
 import Foundation
 import CoreLocation
 import Combine
+import UIKit
 
 @MainActor
 final class EventViewModel: ObservableObject {
@@ -18,6 +19,7 @@ final class EventViewModel: ObservableObject {
 
     @Published var volunteersCount: Int = 1
     @Published var volunteersManualInput: String = "1"
+    @Published var eventPhotoImage: UIImage?
 
     @Published var isSubmitting = false
     @Published var isProfileContextLoading = false
@@ -31,6 +33,8 @@ final class EventViewModel: ObservableObject {
     private let geocodingAPI: GeocodingAPIProtocol
 
     private var selectedLocation: EventLocationSelection?
+    private var eventPhotoData: Data?
+    private var eventPhotoURL: String?
     private var hasLoadedProfileContext = false
 
     init(
@@ -210,6 +214,12 @@ final class EventViewModel: ObservableObject {
         }
     }
 
+    func setEventPhoto(_ image: UIImage) {
+        eventPhotoImage = image
+        eventPhotoURL = nil
+        eventPhotoData = image.jpegData(compressionQuality: 0.82)
+    }
+
     func clearMessages() {
         errorMessage = nil
         successMessage = nil
@@ -247,12 +257,20 @@ final class EventViewModel: ObservableObject {
         defer { isSubmitting = false }
 
         do {
+            var uploadedPhotoURL = eventPhotoURL
+            if let eventPhotoData {
+                uploadedPhotoURL = try await session.performAuthorizedRequest { token in
+                    try await eventAPI.uploadEventPhoto(data: eventPhotoData, token: token)
+                }
+            }
+
             let request = CreateEventRequest(
                 title: trim(eventTitle),
                 description: trim(eventDescription),
                 country: CityDirectory.canonicalCountryName(for: country),
                 city: city,
                 locationName: trim(locationText),
+                photoURL: uploadedPhotoURL,
                 latitude: selectedCoordinate.latitude,
                 longitude: selectedCoordinate.longitude,
                 startsAt: iso8601String(from: combine(day: startDate, time: startTime)),
@@ -264,6 +282,8 @@ final class EventViewModel: ObservableObject {
                 try await eventAPI.createEvent(request, token: token)
             }
             successMessage = response.message ?? "Событие создано"
+            eventPhotoURL = uploadedPhotoURL
+            eventPhotoData = nil
             resetFormKeepingContext()
             return response
         } catch {
@@ -325,6 +345,9 @@ final class EventViewModel: ObservableObject {
         locationText = ""
         selectedCoordinate = nil
         selectedLocation = nil
+        eventPhotoImage = nil
+        eventPhotoData = nil
+        eventPhotoURL = nil
         startDate = nil
         startTime = nil
         endDate = nil

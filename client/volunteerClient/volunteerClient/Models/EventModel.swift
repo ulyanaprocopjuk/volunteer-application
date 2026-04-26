@@ -7,6 +7,7 @@ struct CreateEventRequest: Encodable {
     let country: String
     let city: String
     let locationName: String
+    let photoURL: String?
     let latitude: Double
     let longitude: Double
     let startsAt: String
@@ -21,6 +22,7 @@ struct EventResponse: Decodable, Identifiable, Hashable {
     let country: String
     let city: String
     let locationName: String
+    let photoURL: String?
     let latitude: Double
     let longitude: Double
     let startsAt: String
@@ -37,6 +39,7 @@ struct EventResponse: Decodable, Identifiable, Hashable {
         case country
         case city
         case locationName
+        case photoURL
         case latitude
         case longitude
         case startsAt
@@ -45,6 +48,14 @@ struct EventResponse: Decodable, Identifiable, Hashable {
         case status
         case message
         case createdAt = "created_at"
+    }
+}
+
+struct EventPhotoUploadResponse: Decodable {
+    let photoURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case photoURL = "photo_url"
     }
 }
 

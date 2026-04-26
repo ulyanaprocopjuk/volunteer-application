@@ -1,6 +1,7 @@
 import Foundation
 
 protocol EventAPIProtocol {
+    func uploadEventPhoto(data: Data, token: String?) async throws -> String
     func createEvent(_ request: CreateEventRequest, token: String?) async throws -> EventResponse
     func fetchMyEvents(token: String?) async throws -> [EventResponse]
 }
@@ -12,6 +13,31 @@ final class EventAPI: EventAPIProtocol {
     init(baseURL: URL, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.session = session
+    }
+
+    func uploadEventPhoto(data: Data, token: String?) async throws -> String {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/uploads/event-photo"))
+        request.httpMethod = "POST"
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        if let token, !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        request.httpBody = makeMultipartBody(
+            boundary: boundary,
+            fieldName: "file",
+            fileName: "event-photo.jpg",
+            mimeType: "image/jpeg",
+            data: data
+        )
+
+        let (responseData, response) = try await NetworkRequestExecutor.data(for: request, session: session)
+        try validate(response: response, data: responseData)
+
+        return try JSONDecoder().decode(EventPhotoUploadResponse.self, from: responseData).photoURL
     }
 
     func createEvent(_ request: CreateEventRequest, token: String?) async throws -> EventResponse {
@@ -58,6 +84,24 @@ final class EventAPI: EventAPIProtocol {
             throw EventAPIError.server(message)
         }
     }
+
+    private func makeMultipartBody(
+        boundary: String,
+        fieldName: String,
+        fileName: String,
+        mimeType: String,
+        data: Data
+    ) -> Data {
+        let lineBreak = "\r\n"
+        var body = Data()
+        body.append("--\(boundary)\(lineBreak)")
+        body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\(lineBreak)")
+        body.append("Content-Type: \(mimeType)\(lineBreak)\(lineBreak)")
+        body.append(data)
+        body.append(lineBreak)
+        body.append("--\(boundary)--\(lineBreak)")
+        return body
+    }
 }
 
 private struct APIErrorMessage: Decodable {
@@ -77,6 +121,14 @@ enum EventAPIError: LocalizedError {
             return "Сессия истекла. Повторите вход."
         case .server(let message):
             return message
+        }
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
         }
     }
 }
