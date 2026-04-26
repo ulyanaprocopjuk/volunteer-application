@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -26,3 +26,18 @@ def clear_notifications(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     notification_service.clear_for_user(db, current_user)
+
+
+@router.patch("/{notification_id}/read", response_model=NotificationResponse)
+def mark_notification_read(
+    notification_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    notification = notification_service.mark_read_for_user(db, current_user, notification_id)
+    if notification is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+    return notification

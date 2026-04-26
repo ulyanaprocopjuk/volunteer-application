@@ -2,6 +2,7 @@ import Foundation
 
 protocol NotificationAPIProtocol {
     func fetchNotifications(token: String) async throws -> [AppNotificationItem]
+    func markNotificationRead(id: Int, token: String) async throws
     func clearNotifications(token: String) async throws
 }
 
@@ -23,6 +24,15 @@ final class NotificationAPI: NotificationAPIProtocol {
         try validate(response: response, data: data)
 
         return try JSONDecoder().decode([AppNotificationItem].self, from: data)
+    }
+
+    func markNotificationRead(id: Int, token: String) async throws {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/notifications/\(id)/read"))
+        request.httpMethod = "PATCH"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
+        try validate(response: response, data: data)
     }
 
     func clearNotifications(token: String) async throws {

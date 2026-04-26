@@ -35,6 +35,16 @@ struct AppNotificationItem: Identifiable, Decodable, Hashable {
         return Self.fullDateFormatter.string(from: date)
     }
 
+    func readCopy() -> AppNotificationItem {
+        AppNotificationItem(
+            id: id,
+            senderName: senderName,
+            message: message,
+            createdAt: createdAt,
+            isRead: true
+        )
+    }
+
     private static func parseDate(from value: String) -> Date? {
         isoFormatterWithFractionalSeconds.date(from: value)
             ?? isoFormatter.date(from: value)

@@ -110,6 +110,11 @@ struct NotificationsListView: View {
                         notificationRow(item)
                     }
                     .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        Task {
+                            await viewModel.markAsRead(item)
+                        }
+                    })
 
                     Divider()
                         .padding(.leading, 20)
@@ -120,28 +125,34 @@ struct NotificationsListView: View {
     }
 
     private func notificationRow(_ item: AppNotificationItem) -> some View {
-        HStack(alignment: .top, spacing: 0) {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(item.isRead ? Color.clear : Color.red)
+                .frame(width: 8, height: 8)
+                .padding(.top, 24)
+
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.senderName)
                     .font(.system(size: 17, weight: .semibold, design: .serif))
-                    .foregroundColor(.black)
+                    .foregroundColor(item.isRead ? .gray : .black)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(item.message)
                     .font(.system(size: 15, weight: .regular, design: .serif))
-                    .foregroundColor(.black.opacity(0.6))
+                    .foregroundColor(item.isRead ? .gray.opacity(0.8) : .black.opacity(0.6))
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(item.formattedDate)
                     .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(.gray)
+                    .foregroundColor(item.isRead ? .gray.opacity(0.7) : .gray)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 20)
             .padding(.vertical, 18)
         }
+        .padding(.horizontal, 20)
         .background(Color(.systemGray6))
+        .opacity(item.isRead ? 0.72 : 1)
     }
 
     private var clearButton: some View {

@@ -50,5 +50,20 @@ class NotificationService:
         db.execute(delete(Notification).where(Notification.user_id == user.id))
         db.commit()
 
+    def mark_read_for_user(self, db: Session, user: User, notification_id: int) -> Notification | None:
+        notification = db.scalar(
+            select(Notification).where(
+                Notification.id == notification_id,
+                Notification.user_id == user.id,
+            )
+        )
+        if notification is None:
+            return None
+
+        notification.is_read = True
+        db.commit()
+        db.refresh(notification)
+        return notification
+
 
 notification_service = NotificationService()

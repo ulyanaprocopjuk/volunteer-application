@@ -23,7 +23,7 @@ final class NotificationViewModel: ObservableObject {
     }
 
     var hasNotifications: Bool {
-        !notifications.isEmpty
+        notifications.contains { !$0.isRead }
     }
 
     func loadNotifications() async {
@@ -54,6 +54,22 @@ final class NotificationViewModel: ObservableObject {
                 try await api.clearNotifications(token: token)
             }
             notifications = []
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func markAsRead(_ notification: AppNotificationItem) async {
+        guard !notification.isRead else { return }
+
+        if let index = notifications.firstIndex(where: { $0.id == notification.id }) {
+            notifications[index] = notification.readCopy()
+        }
+
+        do {
+            try await session.performAuthorizedRequest { token in
+                try await api.markNotificationRead(id: notification.id, token: token)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
