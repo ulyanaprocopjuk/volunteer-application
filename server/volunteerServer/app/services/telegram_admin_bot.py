@@ -24,6 +24,7 @@ from app.config import (
 )
 from app.db import SessionLocal
 from app.models import Event, EventAdminMessage, User
+from app.services.location_display import build_location_display
 from app.services.notification_service import notification_service
 
 logger = logging.getLogger(__name__)
@@ -734,9 +735,7 @@ class TelegramAdminBot:
     def _event_text(cls, event: Event, creator: User) -> str:
         title = cls._safe(event.title)
         description = cls._safe(event.description)
-        location_name = cls._safe(event.location_name)
-        city = cls._safe(event.city)
-        country = cls._safe(event.country)
+        location = cls._safe(build_location_display(event.location_name, event.city, event.country))
         username = cls._safe(creator.username)
 
         starts_at = cls._format_datetime(event.starts_at)
@@ -750,7 +749,7 @@ class TelegramAdminBot:
             f"Пользователь: {username}\n"
             f"Название: {title}\n"
             f"Описание: {description}\n"
-            f"Место: {location_name}, {city}, {country}\n"
+            f"Место: {location}\n"
             f"Координаты: {latitude}, {longitude}\n"
             f"Начало: {starts_at}\n"
             f"Конец: {ends_at}\n"

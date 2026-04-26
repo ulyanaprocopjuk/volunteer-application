@@ -387,13 +387,13 @@ class GeocodingService:
         country_context: CountryContext,
         query: str,
         user_city: str | None = None,
-    ) -> tuple[int, int, int, int, int]:
+    ) -> tuple[int, int, int, int, int, int, int]:
         precision_rank = {
-            "exact": 5,
-            "number": 4,
+            "number": 5,
+            "exact": 4,
             "near": 3,
             "range": 2,
-            "street": 1,
+            "street": 2,
         }.get(item.precision, 0)
         country_match = (
             1
@@ -406,8 +406,18 @@ class GeocodingService:
             if user_city and self._cache_normalize(item.city) == self._cache_normalize(user_city)
             else 0
         )
+        text_rank = self._text_match_rank(item, query)
+        object_rank = self._object_rank(item)
         subtitle_non_empty = 1 if item.subtitle else 0
-        return query_city_match, profile_city_match, country_match, precision_rank, subtitle_non_empty
+        return (
+            query_city_match,
+            profile_city_match,
+            country_match,
+            text_rank,
+            object_rank,
+            precision_rank,
+            subtitle_non_empty,
+        )
 
     def _rank_forward_items(
         self,
@@ -540,8 +550,6 @@ class GeocodingService:
                     item.title,
                     item.subtitle,
                     item.fullAddress,
-                    item.city,
-                    item.country,
                 ]
             )
         )
@@ -557,6 +565,85 @@ class GeocodingService:
                 return False
 
         return True
+
+    def _text_match_rank(self, item: GeocodingSuggestionResponse, query: str) -> int:
+        tokens = self._cache_normalize(query).split()
+        if not tokens:
+            return 0
+
+        title_words = self._cache_normalize(item.title).split()
+        address_words = self._cache_normalize(
+            " ".join([item.title, item.subtitle, item.fullAddress])
+        ).split()
+        address_text = " ".join(address_words)
+
+        score = 0
+        for token in tokens:
+            title_score = self._word_match_rank(title_words, token)
+            address_score = self._word_match_rank(address_words, token)
+
+            if title_score:
+                score += title_score + 20
+            elif address_score:
+                score += address_score
+            elif len(token) > 2 and token in address_text:
+                score += 8
+            else:
+                score -= 30
+
+        return score
+
+    @staticmethod
+    def _word_match_rank(words: list[str], token: str) -> int:
+        if any(word == token for word in words):
+            return 30
+        if any(word.startswith(token) for word in words):
+            return 24
+        if len(token) > 2 and any(token in word for word in words):
+            return 12
+        return 0
+
+    def _object_rank(self, item: GeocodingSuggestionResponse) -> int:
+        title = self._cache_normalize(item.title)
+        address = self._cache_normalize(item.fullAddress)
+        city = self._cache_normalize(item.city)
+        country = self._cache_normalize(item.country)
+        text = f"{title} {address}"
+
+        if title and title in {city, country}:
+            return 1
+
+        street_words = (
+            "улица",
+            "ул",
+            "проспект",
+            "пр",
+            "переулок",
+            "пер",
+            "проезд",
+            "площадь",
+            "бульвар",
+            "шоссе",
+            "набережная",
+        )
+        if any(f" {word} " in f" {text} " for word in street_words):
+            return 6
+
+        if item.precision in {"number", "exact", "street"}:
+            return 5
+
+        admin_words = (
+            "область",
+            "район",
+            "край",
+            "республика",
+            "страна",
+            "округ",
+        )
+        if any(f" {word} " in f" {text} " for word in admin_words):
+            return 2
+
+        return 4
 
     def _parse_geo_objects(self, payload: dict[str, Any]) -> list[GeocodingSuggestionResponse]:
         collection = payload.get("response", {}).get("GeoObjectCollection", {})

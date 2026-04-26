@@ -691,7 +691,7 @@ private struct EventLocationPickerSheet: View {
                         .padding(.horizontal, 16)
                     }
 
-                    ZStack(alignment: .trailing) {
+                    ZStack {
                         EventMapView(
                             cameraCoordinate: viewModel.cameraCoordinate,
                             zoomInTrigger: zoomInTrigger,
@@ -721,6 +721,7 @@ private struct EventLocationPickerSheet: View {
                                 zoomOutTrigger += 1
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(12)
 
                         if viewModel.isSearching || viewModel.isInitialLocationLoading {

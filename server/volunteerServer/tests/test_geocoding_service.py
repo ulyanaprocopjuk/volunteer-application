@@ -132,6 +132,47 @@ class GeocodingServiceTests(unittest.TestCase):
 
         self.assertGreater(explicit_city_score, profile_city_score)
 
+    def test_street_prefix_scores_above_administrative_area(self):
+        context = CountryContext(code="BY", display_name="Беларусь", source="profile")
+
+        street_score = self.service._score_forward_item(
+            make_item(
+                "street",
+                title="улица Мирная",
+                full_address="улица Мирная, Минск, Беларусь",
+                precision="street",
+            ),
+            context,
+            "ми",
+            "Минск",
+        )
+        area_score = self.service._score_forward_item(
+            make_item(
+                "area",
+                city="Минск",
+                title="Минская область",
+                full_address="Минская область, Беларусь",
+                precision="exact",
+            ),
+            context,
+            "ми",
+            "Минск",
+        )
+
+        self.assertGreater(street_score, area_score)
+
+    def test_city_country_do_not_make_unrelated_item_relevant(self):
+        self.assertFalse(
+            self.service._item_matches_query(
+                make_item(
+                    "unrelated",
+                    title="Парк Горького",
+                    full_address="Парк Горького, Минск, Беларусь",
+                ),
+                "пи",
+            )
+        )
+
     def test_reverse_rejects_coordinates_outside_cis(self):
         self.service._call_yandex_reverse = lambda latitude, longitude: [
             make_item("pl-reverse", country="Польша", city="Варшава")

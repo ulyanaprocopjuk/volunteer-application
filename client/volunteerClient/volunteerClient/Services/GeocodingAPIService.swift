@@ -160,19 +160,19 @@ final class GeocodingAPI: GeocodingAPIProtocol {
         country: String,
         fallbackCity: String
     ) -> String {
-        let joined = normalize(textParts.joined(separator: ", "))
+        let addressParts = textParts
+            .flatMap { $0.split(separator: ",") }
+            .map { trim(String($0)) }
+            .filter { !$0.isEmpty }
 
-        if let matched = CityDirectory.cities(for: country).first(where: { joined.contains(normalize($0)) }) {
+        let normalizedParts = addressParts.map(normalize)
+        if let matched = CityDirectory.cities(for: country).first(where: { city in
+            normalizedParts.contains(normalize(city))
+        }) {
             return matched
         }
 
-        let subtitleParts = textParts
-            .first?
-            .split(separator: ",")
-            .map { trim(String($0)) }
-            ?? []
-
-        if let firstSubtitlePart = subtitleParts.first,
+        if let firstSubtitlePart = addressParts.first,
            !firstSubtitlePart.isEmpty,
            CityDirectory.canonicalCountryName(for: firstSubtitlePart) != CityDirectory.canonicalCountryName(for: country) {
             return firstSubtitlePart

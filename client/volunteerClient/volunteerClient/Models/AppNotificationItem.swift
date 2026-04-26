@@ -16,11 +16,36 @@ struct AppNotificationItem: Identifiable, Decodable, Hashable {
     }
 
     var formattedDate: String {
-        guard let date = Self.isoFormatter.date(from: createdAt) else {
+        guard let date = Self.parseDate(from: createdAt) else {
             return createdAt
         }
-        return Self.outputFormatter.string(from: date)
+
+        if Calendar.current.isDateInToday(date) {
+            return "Сегодня, \(Self.timeFormatter.string(from: date))"
+        }
+
+        if Calendar.current.isDateInYesterday(date) {
+            return "Вчера, \(Self.timeFormatter.string(from: date))"
+        }
+
+        if Calendar.current.component(.year, from: date) == Calendar.current.component(.year, from: Date()) {
+            return Self.currentYearFormatter.string(from: date)
+        }
+
+        return Self.fullDateFormatter.string(from: date)
     }
+
+    private static func parseDate(from value: String) -> Date? {
+        isoFormatterWithFractionalSeconds.date(from: value)
+            ?? isoFormatter.date(from: value)
+            ?? fallbackFormatter.date(from: value)
+    }
+
+    private static let isoFormatterWithFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
     private static let isoFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -28,10 +53,31 @@ struct AppNotificationItem: Identifiable, Decodable, Hashable {
         return formatter
     }()
 
-    private static let outputFormatter: DateFormatter = {
+    private static let fallbackFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "dd.MM.yyyy HH:mm"
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX"
+        return formatter
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let currentYearFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "d MMMM, HH:mm"
+        return formatter
+    }()
+
+    private static let fullDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "d MMMM yyyy, HH:mm"
         return formatter
     }()
 }

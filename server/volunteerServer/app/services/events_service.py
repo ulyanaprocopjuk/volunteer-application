@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models import Event, Profile, User
 from app.schemas import CreateEventRequest, CurrentCountryEventResponse, EventResponse
 from app.services.geocoding_service import COUNTRY_ALIASES
+from app.services.location_display import build_location_display
 from app.services.notification_service import notification_service
 from app.services.telegram_admin_bot import telegram_admin_bot
 
@@ -118,8 +119,7 @@ class EventService:
 
     @staticmethod
     def _build_address(event: Event) -> str:
-        parts = [event.location_name, event.city, event.country]
-        return ", ".join(part for part in parts if part)
+        return build_location_display(event.location_name, event.city, event.country)
 
     @staticmethod
     def _country_variants(country: str) -> list[str]:
