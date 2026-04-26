@@ -15,8 +15,10 @@ struct EventSummaryCard: View {
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text(event.title)
-                        .font(.system(size: 23, weight: .bold, design: .serif))
+                        .font(.system(size: 20, weight: .bold, design: .serif))
                         .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 8) {
@@ -47,18 +49,19 @@ struct EventSummaryCard: View {
             }
             .padding(.top, 28)
 
-            HStack(alignment: .top) {
+            organizerBlock
+                .padding(.top, 24)
+
+            VStack(alignment: .leading, spacing: 14) {
                 Text("Требуется волонтёров: \(event.volunteersNeeded)")
                     .font(.system(size: 17, weight: .semibold, design: .serif))
                     .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
 
-                Spacer(minLength: 16)
-
-                Text(createdAtText)
+                Text("Дата создания: \(createdAtText)")
                     .font(.system(size: 16, weight: .semibold, design: .serif))
                     .foregroundColor(.black.opacity(0.55))
             }
-            .padding(.top, 30)
+            .padding(.top, 24)
 
             Rectangle()
                 .fill(Color(red: 58/255, green: 145/255, blue: 233/255))
@@ -66,7 +69,7 @@ struct EventSummaryCard: View {
                 .padding(.top, 18)
         }
         .padding(20)
-        .background(Color(.systemGray6))
+        .background(Color.white)
     }
 
     private func infoRow(icon: String, text: String) -> some View {
@@ -109,7 +112,7 @@ struct EventSummaryCard: View {
                 placeholderThumbnail
             }
         }
-        .frame(width: 64, height: 64)
+        .frame(width: 72, height: 72)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -121,6 +124,21 @@ struct EventSummaryCard: View {
         Image(systemName: "calendar")
             .font(.system(size: 24, weight: .semibold))
             .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+    }
+
+    private var organizerBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Организатор:")
+                .font(.system(size: 12, weight: .regular, design: .serif))
+                .foregroundColor(.black.opacity(0.48))
+
+            Text(organizerText)
+                .font(.system(size: 15, weight: .semibold, design: .serif))
+                .foregroundColor(.black.opacity(0.62))
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var statusText: String {
@@ -154,6 +172,11 @@ struct EventSummaryCard: View {
         }
 
         return location
+    }
+
+    private var organizerText: String {
+        let value = event.organizerName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "Не указано" : value
     }
 
     private var photoURL: URL? {

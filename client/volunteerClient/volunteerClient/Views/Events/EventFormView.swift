@@ -52,6 +52,10 @@ struct EventFormView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 22) {
+                        eventPhotoSection
+                            .frame(maxWidth: .infinity)
+                            .padding(.bottom, 2)
+
                         EventLabeledInputField(
                             title: "Название события",
                             text: $viewModel.eventTitle,
@@ -63,8 +67,6 @@ struct EventFormView: View {
                             text: $viewModel.eventDescription,
                             placeholder: "Введите описание события"
                         )
-
-                        eventPhotoSection
 
                         EventPickerField(
                             title: "Местоположение",
@@ -313,41 +315,37 @@ struct EventFormView: View {
     private var eventPhotoSection: some View {
         let photoImage = viewModel.eventPhotoImage
 
-        return VStack(alignment: .leading, spacing: 10) {
-            EventFieldTitle(title: "Фотография события")
+        return PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+            ZStack {
+                if let image = photoImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 104, height: 104)
+                        .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color(red: 231/255, green: 243/255, blue: 247/255))
+                        .frame(width: 104, height: 104)
 
-            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(.systemGray6))
-                        .frame(height: 168)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.gray.opacity(0.35), lineWidth: 1)
-                        )
-
-                    if let image = photoImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 168)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    } else {
-                        VStack(spacing: 10) {
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 28, weight: .semibold))
-                                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-
-                            Text("Добавить фото")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.black.opacity(0.72))
-                        }
-                    }
+                    Image(systemName: "calendar")
+                        .font(.system(size: 40, weight: .semibold))
+                        .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
                 }
             }
-            .buttonStyle(.plain)
+            .overlay(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(Color(red: 42/255, green: 42/255, blue: 42/255))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white)
+                    )
+                    .offset(x: 2, y: 2)
+            }
         }
+        .buttonStyle(.plain)
     }
 
     private func proceedToConfirmation() {

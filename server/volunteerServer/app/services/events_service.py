@@ -58,11 +58,18 @@ class EventService:
             )
 
         response = EventResponse.model_validate(event)
+        response.organizer_name = self._organizer_name(user)
         response.message = "Событие отправлено для подтверждения, ожидайте."
         return response
 
     def get_event(self, db: Session, event_id: str) -> Event | None:
         return db.get(Event, event_id)
+
+    def get_event_response(self, db: Session, event_id: str) -> EventResponse | None:
+        event = self.get_event(db, event_id)
+        if event is None:
+            return None
+        return self._response(event)
 
     def list_my_events(self, db: Session, user: User) -> list[EventResponse]:
         events = db.scalars(
@@ -71,7 +78,7 @@ class EventService:
             .order_by(Event.created_at.desc())
         ).all()
 
-        return [EventResponse.model_validate(event) for event in events]
+        return [self._response(event) for event in events]
 
     def list_events(
         self,
@@ -121,6 +128,28 @@ class EventService:
     @staticmethod
     def _build_address(event: Event) -> str:
         return build_location_display(event.location_name, event.city, event.country)
+
+    def _response(self, event: Event) -> EventResponse:
+        response = EventResponse.model_validate(event)
+        response.organizer_name = self._organizer_name(event.creator)
+        return response
+
+    @staticmethod
+    def _organizer_name(user: User | None) -> str | None:
+        if user is None or user.profile is None:
+            return None
+
+        profile = user.profile
+        organization_name = (profile.organization_name or "").strip()
+        if organization_name:
+            return organization_name
+
+        full_name = " ".join(
+            part.strip()
+            for part in [profile.first_name or "", profile.last_name or ""]
+            if part and part.strip()
+        )
+        return full_name or None
 
     @staticmethod
     def _country_variants(country: str) -> list[str]:

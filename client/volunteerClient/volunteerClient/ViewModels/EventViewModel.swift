@@ -20,6 +20,7 @@ final class EventViewModel: ObservableObject {
     @Published var volunteersCount: Int = 1
     @Published var volunteersManualInput: String = "1"
     @Published var eventPhotoImage: UIImage?
+    @Published var organizerName = ""
 
     @Published var isSubmitting = false
     @Published var isProfileContextLoading = false
@@ -159,6 +160,7 @@ final class EventViewModel: ObservableObject {
             }
             let country = canonicalCountry(from: profile.country)
             let city = canonicalCity(from: profile.city, in: country)
+            organizerName = displayName(from: profile)
             let searchArea = CityDirectory.searchArea(for: country)
             let cityCoordinate = try await geocodingAPI.geocodeCity(city: city, country: country, area: searchArea)
                 ?? searchArea.center
@@ -370,6 +372,22 @@ final class EventViewModel: ObservableObject {
         }
 
         return CityDirectory.cities(for: country).first ?? "Минск"
+    }
+
+    private func displayName(from profile: ProfileResponse) -> String {
+        let organizationName = trim(profile.organizationName ?? "")
+        if !organizationName.isEmpty {
+            return organizationName
+        }
+
+        let fullName = [profile.firstName, profile.lastName]
+            .compactMap { value -> String? in
+                let trimmed = trim(value ?? "")
+                return trimmed.isEmpty ? nil : trimmed
+            }
+            .joined(separator: " ")
+
+        return fullName
     }
 
     private func iso8601String(from date: Date) -> String {

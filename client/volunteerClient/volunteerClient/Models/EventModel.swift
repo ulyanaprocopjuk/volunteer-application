@@ -30,6 +30,7 @@ struct EventResponse: Decodable, Identifiable, Hashable {
     let volunteersNeeded: Int
     let status: String?
     let message: String?
+    let organizerName: String?
     let createdAt: String?
 
     enum CodingKeys: String, CodingKey {
@@ -47,6 +48,7 @@ struct EventResponse: Decodable, Identifiable, Hashable {
         case volunteersNeeded
         case status
         case message
+        case organizerName
         case createdAt = "created_at"
     }
 }

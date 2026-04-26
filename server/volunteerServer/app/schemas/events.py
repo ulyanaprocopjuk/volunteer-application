@@ -56,6 +56,7 @@ class EventResponse(BaseModel):
     volunteers_needed: int = Field(alias="volunteersNeeded")
     status: str | None = None
     message: str | None = None
+    organizer_name: str | None = Field(default=None, alias="organizerName")
     created_at: datetime | None = Field(default=None, alias="created_at")
 
     @field_validator("status")

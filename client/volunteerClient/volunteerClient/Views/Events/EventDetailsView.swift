@@ -18,7 +18,7 @@ struct EventDetailsView: View {
                 }
             }
         }
-        .background(Color(.systemGray6).ignoresSafeArea())
+        .background(Color.white.ignoresSafeArea())
     }
 
     private var headerView: some View {
@@ -72,6 +72,7 @@ struct EventDetailsView: View {
             volunteersNeeded: 3,
             status: "pending",
             message: nil,
+            organizerName: "Анна Иванова",
             createdAt: "2026-04-24T09:00:00Z"
         )
     )

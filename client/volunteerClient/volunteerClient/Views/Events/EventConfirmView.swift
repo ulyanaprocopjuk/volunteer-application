@@ -7,6 +7,8 @@ struct EventConfirmView: View {
 
     @State private var createdAt = Date()
 
+    private let eventImageSize: CGFloat = 56
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -15,8 +17,8 @@ struct EventConfirmView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         eventCard
-                            .padding(.horizontal, 20)
-                            .padding(.top, 18)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 25)
                             .padding(.bottom, 24)
                     }
                 }
@@ -24,10 +26,10 @@ struct EventConfirmView: View {
                 confirmButton
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
-                    .padding(.bottom, 20)
-                    .background(Color(.systemGray6))
+                    .padding(.bottom, 5)
+                    .background(Color.white)
             }
-            .background(Color(.systemGray6).ignoresSafeArea())
+            .background(Color.white.ignoresSafeArea())
 
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -47,9 +49,10 @@ struct EventConfirmView: View {
     private var headerView: some View {
         ZStack {
             Color(.systemGray6)
+                .ignoresSafeArea(edges: .top)
 
             Text("Подтверждение")
-                .font(.system(size: 22, weight: .semibold, design: .serif))
+                .font(.system(size: 20, weight: .semibold, design: .serif))
                 .foregroundColor(.black.opacity(0.78))
 
             HStack {
@@ -71,7 +74,7 @@ struct EventConfirmView: View {
             }
             .padding(.horizontal, 20)
         }
-        .frame(height: 74)
+        .frame(height: 60)
         .overlay(alignment: .bottom) {
             Divider()
         }
@@ -79,24 +82,22 @@ struct EventConfirmView: View {
 
     private var eventCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            eventPhotoView
-                .padding(.bottom, viewModel.eventPhotoImage == nil ? 0 : 18)
-
             topBlock
 
             if !displayDescription.isEmpty {
                 Text(displayDescription)
-                    .font(.system(size: 17, weight: .regular, design: .serif))
+                    .font(.system(size: 13, weight: .regular, design: .serif))
                     .foregroundColor(.black.opacity(0.62))
                     .lineSpacing(8)
+
                     .padding(.top, 26)
             }
 
             infoBlock
-                .padding(.top, 42)
+                .padding(.top, 30)
 
             bottomMetaBlock
-                .padding(.top, 36)
+                .padding(.top, 28)
         }
     }
 
@@ -106,67 +107,96 @@ struct EventConfirmView: View {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
-                .frame(maxWidth: .infinity)
-                .frame(height: 190)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(width: eventImageSize, height: eventImageSize)
+                .clipShape(Circle())
+        } else {
+            ZStack {
+                Circle()
+                    .fill(Color(red: 18/255, green: 162/255, blue: 231/255).opacity(0.12))
+
+                Image(systemName: "calendar")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+            }
+            .frame(width: eventImageSize, height: eventImageSize)
         }
     }
 
     private var topBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .center, spacing: 14) {
+            eventPhotoView
+
             Text(displayTitle)
-                .font(.system(size: 24, weight: .bold, design: .serif))
+                .font(.system(size: 17, weight: .bold, design: .serif))
                 .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var infoBlock: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 14) {
-                infoRow(
-                    icon: "mappin.and.ellipse",
-                    text: displayLocation
-                )
+        VStack(alignment: .leading, spacing: 12) {
+            infoRow(
+                icon: "mappin.and.ellipse",
+                text: displayLocation
+            )
 
-                infoRow(
-                    icon: "calendar",
-                    text: displayDateRange
-                )
+            infoRow(
+                icon: "calendar",
+                text: displayDateRange
+            )
 
-                infoRow(
-                    icon: "clock",
-                    text: displayTimeRange
-                )
-            }
-
-            Spacer(minLength: 16)
+            infoRow(
+                icon: "clock",
+                text: displayTimeRange
+            )
         }
     }
 
+
     private var bottomMetaBlock: some View {
-        HStack(alignment: .center) {
-            Text(displayVolunteersText)
-                .font(.system(size: 17, weight: .semibold, design: .serif))
-                .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(displayVolunteersText)
+                    .font(.system(size: 14, weight: .regular, design: .serif))
+                    .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
 
-            Spacer()
+                Text("Дата создания: \(displayCreatedDate)")
+                    .font(.system(size: 14, weight: .regular, design: .serif))
+                    .foregroundColor(.black.opacity(0.55))
+            }
 
-            Text(displayCreatedDate)
-                .font(.system(size: 17, weight: .semibold, design: .serif))
-                .foregroundColor(.black.opacity(0.55))
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Text("Организатор:")
+                    .font(.system(size: 13, weight: .regular, design: .serif))
+                    .foregroundColor(.black.opacity(0.48))
+
+                Text(displayOrganizer)
+                    .font(.system(size: 14, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.62))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: 90, alignment: .trailing)
+
         }
+
     }
 
     private func infoRow(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.black)
                 .frame(width: 18)
 
             Text(text)
-                .font(.system(size: 17, weight: .regular, design: .serif))
+                .font(.system(size: 14, weight: .regular, design: .serif))
                 .foregroundColor(.black.opacity(0.62))
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -265,7 +295,12 @@ struct EventConfirmView: View {
     }
 
     private var displayCreatedDate: String {
-        "Создано \(Self.createdDateFormatter.string(from: createdAt))"
+        Self.createdDateFormatter.string(from: createdAt)
+    }
+
+    private var displayOrganizer: String {
+        let value = viewModel.organizerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? "Не указано" : value
     }
 
     private static let shortDateFormatter: DateFormatter = {

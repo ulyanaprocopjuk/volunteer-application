@@ -52,7 +52,7 @@ def get_event(
     event_id: str,
     db: Annotated[Session, Depends(get_db)],
 ):
-    event = event_service.get_event(db, event_id)
+    event = event_service.get_event_response(db, event_id)
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-    return EventResponse.model_validate(event)
+    return event
