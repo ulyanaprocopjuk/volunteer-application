@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import BackgroundTasks, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Event, Profile, User
@@ -66,17 +68,42 @@ class EventService:
         return db.get(Event, event_id)
 
     def get_event_response(self, db: Session, event_id: str) -> EventResponse | None:
+        self._mark_completed_events(db)
         event = self.get_event(db, event_id)
         if event is None:
             return None
         return self._response(event)
 
-    def list_my_events(self, db: Session, user: User) -> list[EventResponse]:
-        events = db.scalars(
+    def list_my_events(
+        self,
+        db: Session,
+        user: User,
+        event_filter: str | None = None,
+    ) -> list[EventResponse]:
+        now = datetime.now(UTC)
+        self._mark_completed_events(db, now=now)
+        comparison_time = self._database_comparison_time(db, now)
+        event_end = func.coalesce(Event.ends_at, Event.starts_at)
+
+        query = (
             select(Event)
             .where(Event.creator_id == user.id)
             .order_by(Event.created_at.desc())
-        ).all()
+        )
+
+        normalized_filter = (event_filter or "").strip().lower()
+
+        if normalized_filter == "active":
+            query = query.where(
+                func.lower(Event.status).in_(("approved", "active")),
+                event_end >= comparison_time,
+            )
+        elif normalized_filter == "history":
+            query = query.where(
+                func.lower(Event.status).in_(("rejected", "completed"))
+            )
+
+        events = db.scalars(query).all()
 
         return [self._response(event) for event in events]
 
@@ -87,9 +114,17 @@ class EventService:
         country: str | None = None,
         city: str | None = None,
     ) -> list[CurrentCountryEventResponse]:
+        now = datetime.now(UTC)
+        self._mark_completed_events(db, now=now)
+        comparison_time = self._database_comparison_time(db, now)
+        event_end = func.coalesce(Event.ends_at, Event.starts_at)
+
         query = (
             select(Event)
-            .where(Event.status == "approved")
+            .where(
+                func.lower(Event.status).in_(("approved", "active")),
+                event_end >= comparison_time,
+            )
             .order_by(Event.starts_at.asc(), Event.created_at.desc())
         )
 
@@ -133,6 +168,32 @@ class EventService:
         response = EventResponse.model_validate(event)
         response.organizer_name = self._organizer_name(event.creator)
         return response
+
+    def _mark_completed_events(self, db: Session, now: datetime | None = None) -> None:
+        current_time = now or datetime.now(UTC)
+        comparison_time = self._database_comparison_time(db, current_time)
+        event_end = func.coalesce(Event.ends_at, Event.starts_at)
+
+        result = db.execute(
+            update(Event)
+            .where(
+                func.lower(Event.status).in_(("approved", "active")),
+                event_end < comparison_time,
+            )
+            .values(
+                status="completed",
+                updated_at=comparison_time,
+            )
+        )
+
+        if result.rowcount:
+            db.commit()
+
+    @staticmethod
+    def _database_comparison_time(db: Session, value: datetime) -> datetime:
+        if db.bind is not None and db.bind.dialect.name == "sqlite":
+            return value.replace(tzinfo=None)
+        return value
 
     @staticmethod
     def _organizer_name(user: User | None) -> str | None:

@@ -9,6 +9,7 @@ final class MyEventsViewModel: ObservableObject {
 
     private let session: AppSession
     private let api: EventAPIProtocol
+    private var currentLoadID: UUID?
 
     init(
         session: AppSession,
@@ -22,18 +23,26 @@ final class MyEventsViewModel: ObservableObject {
         events.isEmpty && !isLoading
     }
 
-    func loadMyEvents() async {
-        guard !isLoading else { return }
+    func loadMyEvents(filter: MyEventsFilter? = nil) async {
+        let loadID = UUID()
+        currentLoadID = loadID
 
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            if currentLoadID == loadID {
+                isLoading = false
+            }
+        }
 
         do {
-            events = try await session.performAuthorizedRequest { token in
-                try await api.fetchMyEvents(token: token)
+            let loadedEvents = try await session.performAuthorizedRequest { token in
+                try await api.fetchMyEvents(filter: filter, token: token)
             }
+            guard currentLoadID == loadID else { return }
+            events = loadedEvents
         } catch {
+            guard currentLoadID == loadID else { return }
             errorMessage = error.localizedDescription
         }
     }

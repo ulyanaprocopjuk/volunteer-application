@@ -78,7 +78,7 @@ final class EventViewModel: ObservableObject {
         guard let startDate, let startTime else {
             return "Выберите начало события"
         }
-        return Self.dateTimeFormatter.string(from: combine(day: startDate, time: startTime))
+        return EventDateDisplayFormatter.dateTimeText(date: combine(day: startDate, time: startTime))
     }
 
     var formattedEndText: String {
@@ -86,11 +86,19 @@ final class EventViewModel: ObservableObject {
             return "Выберите конец события"
         }
 
-        if let endTime {
-            return Self.dateTimeFormatter.string(from: combine(day: endDate, time: endTime))
+        guard let startDate else {
+            if let endTime {
+                return EventDateDisplayFormatter.dateTimeText(date: combine(day: endDate, time: endTime))
+            }
+
+            return EventDateDisplayFormatter.shortDateText(endDate)
         }
 
-        return Self.dateFormatter.string(from: endDate)
+        if Calendar.current.isDate(startDate, inSameDayAs: endDate), let endTime {
+            return EventDateDisplayFormatter.dateTimeText(date: combine(day: endDate, time: endTime))
+        }
+
+        return EventDateDisplayFormatter.shortDateText(endDate)
     }
 
     var currentLocationSelection: EventLocationSelection? {
@@ -337,7 +345,15 @@ final class EventViewModel: ObservableObject {
     }
 
     private var endTimestamp: String? {
-        guard let endDate, let endTime else { return nil }
+        guard let endDate else { return nil }
+
+        if let startDate,
+           !Calendar.current.isDate(startDate, inSameDayAs: endDate),
+           let startTime {
+            return iso8601String(from: combine(day: endDate, time: startTime))
+        }
+
+        guard let endTime else { return nil }
         return iso8601String(from: combine(day: endDate, time: endTime))
     }
 
@@ -397,20 +413,6 @@ final class EventViewModel: ObservableObject {
     private func trim(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "d MMMM yyyy"
-        return formatter
-    }()
-
-    private static let dateTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "d MMMM yyyy, HH:mm"
-        return formatter
-    }()
 
     private static let iso8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

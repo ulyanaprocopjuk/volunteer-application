@@ -63,8 +63,7 @@ struct HomePageView: View {
                         onBack: {
                             isEventFormPresented = false
                         },
-                        onEventSubmitted: { event in
-                            myEventsModel.prependOrUpdate(event)
+                        onEventSubmitted: { _ in
                             isEventFormPresented = false
                             presentModerationMessage()
                         }

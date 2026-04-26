@@ -61,6 +61,11 @@ struct EventPhotoUploadResponse: Decodable {
     }
 }
 
+enum MyEventsFilter: String {
+    case active
+    case history
+}
+
 struct CurrentCountryEventResponse: Decodable, Identifiable {
     let id: String
     let title: String
@@ -109,14 +114,19 @@ enum EventModerationStatus {
     case pending
     case approved
     case rejected
+    case completed
 
     init(rawValue: String?) {
         let value = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
 
-        if value.contains("approved")
+        if value.contains("completed")
+            || value.contains("заверш") {
+            self = .completed
+        } else if value.contains("approved")
             || value.contains("confirmed")
             || value.contains("accept")
             || value.contains("active")
+            || value.contains("актив")
             || value.contains("published")
             || value.contains("подтверж") {
             self = .approved
@@ -126,6 +136,9 @@ enum EventModerationStatus {
             || value.contains("cancel")
             || value.contains("отклон") {
             self = .rejected
+        } else if value.contains("pending")
+            || value.contains("ожида") {
+            self = .pending
         } else {
             self = .pending
         }

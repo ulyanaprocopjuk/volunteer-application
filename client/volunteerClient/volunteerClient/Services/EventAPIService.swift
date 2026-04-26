@@ -3,7 +3,7 @@ import Foundation
 protocol EventAPIProtocol {
     func uploadEventPhoto(data: Data, token: String?) async throws -> String
     func createEvent(_ request: CreateEventRequest, token: String?) async throws -> EventResponse
-    func fetchMyEvents(token: String?) async throws -> [EventResponse]
+    func fetchMyEvents(filter: MyEventsFilter?, token: String?) async throws -> [EventResponse]
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -56,8 +56,23 @@ final class EventAPI: EventAPIProtocol {
         return try JSONDecoder().decode(EventResponse.self, from: data)
     }
 
-    func fetchMyEvents(token: String?) async throws -> [EventResponse] {
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/my"))
+    func fetchMyEvents(filter: MyEventsFilter?, token: String?) async throws -> [EventResponse] {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("api/events/my"),
+            resolvingAgainstBaseURL: false
+        )
+
+        if let filter {
+            components?.queryItems = [
+                URLQueryItem(name: "filter", value: filter.rawValue)
+            ]
+        }
+
+        guard let url = components?.url else {
+            throw EventAPIError.invalidResponse
+        }
+
+        var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "GET"
 
         if let token, !token.isEmpty {

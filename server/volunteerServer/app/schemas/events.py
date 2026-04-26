@@ -67,8 +67,10 @@ class EventResponse(BaseModel):
         return {
             "pending": "Ожидает подтверждения",
             "approved": "Подтверждено",
+            "active": "Подтверждено",
             "rejected": "Отклонено",
-        }.get(value, value)
+            "completed": "Завершено",
+        }.get(value.lower(), value)
 
 
 class CurrentCountryEventResponse(BaseModel):

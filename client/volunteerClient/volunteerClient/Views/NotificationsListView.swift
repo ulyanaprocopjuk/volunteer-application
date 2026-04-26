@@ -35,10 +35,10 @@ struct NotificationsListView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 10)
                         .padding(.bottom, 20)
-                        .background(Color(.systemGray6))
+                        .background(Color.white)
                 }
             }
-            .background(Color(.systemGray6).ignoresSafeArea())
+            .background(Color.white.ignoresSafeArea())
             .task {
                 guard shouldLoadOnAppear else { return }
                 await viewModel.loadNotifications()
@@ -57,9 +57,10 @@ struct NotificationsListView: View {
     private var headerView: some View {
         ZStack {
             Color(.systemGray6)
+                .ignoresSafeArea(edges: .top)
 
             Text("Уведомления")
-                .font(.system(size: 22, weight: .semibold, design: .serif))
+                .font(.system(size: 20, weight: .semibold, design: .serif))
                 .foregroundColor(.black.opacity(0.78))
 
             HStack {
@@ -81,7 +82,7 @@ struct NotificationsListView: View {
             }
             .padding(.horizontal, 20)
         }
-        .frame(height: 74)
+        .frame(height: 60)
         .overlay(alignment: .bottom) {
             Divider()
         }
@@ -94,8 +95,8 @@ struct NotificationsListView: View {
                 .foregroundColor(.gray.opacity(0.7))
 
             Text("У вас нет уведомлений")
-                .font(.system(size: 20, weight: .regular))
-                .foregroundColor(.black.opacity(0.65))
+                .font(.system(size: 18, weight: .regular, design: .serif))
+                .foregroundColor(.black.opacity(0.55))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -151,7 +152,7 @@ struct NotificationsListView: View {
             .padding(.vertical, 18)
         }
         .padding(.horizontal, 20)
-        .background(Color(.systemGray6))
+        .background(Color.white)
         .opacity(item.isRead ? 0.72 : 1)
     }
 

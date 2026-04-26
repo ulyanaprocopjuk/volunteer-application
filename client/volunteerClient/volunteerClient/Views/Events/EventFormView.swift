@@ -240,7 +240,8 @@ struct EventFormView: View {
                     : draftEndDate,
                 initialTime: picker == .start
                     ? draftStartTime
-                    : draftEndTime
+                    : draftEndTime,
+                startDay: viewModel.startDate
             ) { day, time in
                 switch picker {
                 case .start:
@@ -283,7 +284,12 @@ struct EventFormView: View {
                         draftEndTime = time
                     }
                     viewModel.endDate = viewModel.stripTime(from: day)
-                    viewModel.endTime = time
+                    if let startDate = viewModel.startDate,
+                       !Calendar.current.isDate(startDate, inSameDayAs: viewModel.stripTime(from: day)) {
+                        viewModel.endTime = nil
+                    } else {
+                        viewModel.endTime = time
+                    }
                 }
             }
         }
@@ -526,6 +532,7 @@ private struct EventDateTimePickerSheet: View {
 
     let picker: EventFormView.ActivePicker
     let minimumDay: Date
+    let startDay: Date?
     let onSave: (Date, Date?) -> Void
 
     @State private var step: Step = .day
@@ -537,10 +544,12 @@ private struct EventDateTimePickerSheet: View {
         minimumDay: Date,
         initialDay: Date,
         initialTime: Date,
+        startDay: Date? = nil,
         onSave: @escaping (Date, Date?) -> Void
     ) {
         self.picker = picker
         self.minimumDay = minimumDay
+        self.startDay = startDay
         self.onSave = onSave
         _draftDay = State(initialValue: initialDay)
         _draftTime = State(initialValue: initialTime)
@@ -664,6 +673,13 @@ private struct EventDateTimePickerSheet: View {
         switch step {
         case .day:
             draftDay = Calendar.current.startOfDay(for: draftDay)
+            if picker == .end,
+               let startDay,
+               !Calendar.current.isDate(startDay, inSameDayAs: draftDay) {
+                onSave(draftDay, nil)
+                dismiss()
+                return
+            }
             step = .time
         case .time:
             onSave(draftDay, draftTime)

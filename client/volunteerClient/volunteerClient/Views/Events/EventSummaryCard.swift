@@ -149,6 +149,8 @@ struct EventSummaryCard: View {
             return "Подтверждено"
         case .rejected:
             return "Отклонено"
+        case .completed:
+            return "Завершено"
         }
     }
 
@@ -160,6 +162,8 @@ struct EventSummaryCard: View {
             return Color(red: 0.16, green: 0.56, blue: 0.23)
         case .rejected:
             return Color(red: 0.80, green: 0.20, blue: 0.20)
+        case .completed:
+            return .black.opacity(0.45)
         }
     }
 
@@ -198,23 +202,11 @@ struct EventSummaryCard: View {
     }
 
     private var dateRangeText: String {
-        let startText = Self.dateFormatter.string(from: startDate)
-
-        if let endDate {
-            return "\(startText) - \(Self.dateFormatter.string(from: endDate))"
-        }
-
-        return startText
+        EventDateDisplayFormatter.dateRangeText(start: startDate, end: endDate)
     }
 
     private var timeRangeText: String {
-        let startText = Self.timeFormatter.string(from: startDate)
-
-        if let endDate {
-            return "\(startText) - \(Self.timeFormatter.string(from: endDate))"
-        }
-
-        return startText
+        EventDateDisplayFormatter.timeRangeText(start: startDate, end: endDate)
     }
 
     private var createdAtText: String {
@@ -239,20 +231,6 @@ struct EventSummaryCard: View {
     private static let isoFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "dd MMM yyyy"
-        return formatter
-    }()
-
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "HH:mm"
         return formatter
     }()
 

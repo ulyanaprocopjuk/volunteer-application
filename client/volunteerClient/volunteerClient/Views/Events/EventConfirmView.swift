@@ -171,7 +171,7 @@ struct EventConfirmView: View {
 
             Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Организатор:")
                     .font(.system(size: 13, weight: .regular, design: .serif))
                     .foregroundColor(.black.opacity(0.48))
@@ -182,7 +182,7 @@ struct EventConfirmView: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(width: 90, alignment: .trailing)
+            .frame(width: 90, alignment: .leading)
 
         }
 
@@ -263,14 +263,7 @@ struct EventConfirmView: View {
             return "Дата не указана"
         }
 
-        let startText = Self.shortDateFormatter.string(from: startDate)
-
-        if let endDate = viewModel.endDate {
-            let endText = Self.shortDateFormatter.string(from: endDate)
-            return "\(startText) — \(endText)"
-        } else {
-            return "\(startText)"
-        }
+        return EventDateDisplayFormatter.dateRangeText(start: startDate, end: viewModel.endDate)
     }
 
     private var displayTimeRange: String {
@@ -278,15 +271,21 @@ struct EventConfirmView: View {
             return "Время не указано"
         }
 
-        let startText = Self.timeFormatter.string(from: startTime)
-
-        if let endTime = viewModel.endTime {
-            let endText = Self.timeFormatter.string(from: endTime)
-
-            return "\(startText) — \(endText)"
-        } else {
-            return "\(startText)"
+        guard let startDate = viewModel.startDate else {
+            return EventDateDisplayFormatter.timeText(startTime)
         }
+
+        let startDateTime = viewModel.combine(day: startDate, time: startTime)
+        let endDateTime: Date?
+        if let endDate = viewModel.endDate,
+           let endTime = viewModel.endTime,
+           Calendar.current.isDate(startDate, inSameDayAs: endDate) {
+            endDateTime = viewModel.combine(day: endDate, time: endTime)
+        } else {
+            endDateTime = nil
+        }
+
+        return EventDateDisplayFormatter.timeRangeText(start: startDateTime, end: endDateTime)
     }
 
     private var displayVolunteersText: String {
@@ -302,20 +301,6 @@ struct EventConfirmView: View {
         let value = viewModel.organizerName.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? "Не указано" : value
     }
-
-    private static let shortDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "dd MMM yyyy"
-        return formatter
-    }()
-
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     private static let createdDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

@@ -728,6 +728,7 @@ class TelegramAdminBot:
             "pending": "Ожидает подтверждения",
             "approved": "Подтверждено",
             "rejected": "Отклонено",
+            "completed": "Завершено",
         }
         return statuses.get(status or "", status or "")
 

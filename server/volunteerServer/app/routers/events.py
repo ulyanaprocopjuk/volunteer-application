@@ -26,8 +26,9 @@ def create_event(
 def list_my_events(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    filter: str | None = Query(default=None, pattern="^(active|history)$"),
 ):
-    return event_service.list_my_events(db, current_user)
+    return event_service.list_my_events(db, current_user, event_filter=filter)
 
 
 @router.get("/current-country/me", response_model=list[CurrentCountryEventResponse])
