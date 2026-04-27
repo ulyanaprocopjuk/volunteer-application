@@ -33,6 +33,19 @@ struct EventSummaryCard: View {
                 }
             }
 
+            if !directionText.isEmpty {
+                HStack(spacing: 8) {
+                    Text("Направление:")
+                        .font(.system(size: 16, weight: .regular, design: .serif))
+                        .foregroundColor(.black.opacity(0.7))
+
+                    Text(directionText)
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                }
+                .padding(.top, 18)
+            }
+
             if !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(event.description)
                     .font(.system(size: 17, weight: .regular, design: .serif))
@@ -181,6 +194,10 @@ struct EventSummaryCard: View {
     private var organizerText: String {
         let value = event.organizerName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.isEmpty ? "Не указано" : value
+    }
+
+    private var directionText: String {
+        event.direction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private var photoURL: URL? {

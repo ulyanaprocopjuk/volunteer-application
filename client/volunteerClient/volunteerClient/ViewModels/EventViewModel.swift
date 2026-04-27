@@ -6,6 +6,7 @@ import UIKit
 @MainActor
 final class EventViewModel: ObservableObject {
     @Published var eventTitle = ""
+    @Published var selectedDirection = ""
     @Published var eventDescription = ""
 
     @Published var locationText = ""
@@ -56,6 +57,7 @@ final class EventViewModel: ObservableObject {
 
     var canSubmit: Bool {
         !trim(eventTitle).isEmpty &&
+        !trim(selectedDirection).isEmpty &&
         !trim(eventDescription).isEmpty &&
         selectedCoordinate != nil &&
         !trim(locationText).isEmpty &&
@@ -276,6 +278,7 @@ final class EventViewModel: ObservableObject {
 
             let request = CreateEventRequest(
                 title: trim(eventTitle),
+                direction: trim(selectedDirection),
                 description: trim(eventDescription),
                 country: CityDirectory.canonicalCountryName(for: country),
                 city: city,
@@ -359,6 +362,7 @@ final class EventViewModel: ObservableObject {
 
     private func resetFormKeepingContext() {
         eventTitle = ""
+        selectedDirection = ""
         eventDescription = ""
         locationText = ""
         selectedCoordinate = nil

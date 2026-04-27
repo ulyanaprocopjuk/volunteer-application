@@ -10,6 +10,7 @@ struct EventFormView: View {
 
     @State private var isLocationSheetPresented = false
     @State private var isConfirmPresented = false
+    @State private var isDirectionPickerPresented = false
     @State private var activePicker: ActivePicker?
     @State private var selectedPhotoItem: PhotosPickerItem?
 
@@ -61,6 +62,16 @@ struct EventFormView: View {
                             text: $viewModel.eventTitle,
                             placeholder: "Введите название события"
                         )
+
+                        EventPickerField(
+                            title: "Направление",
+                            value: viewModel.selectedDirection,
+                            placeholder: "Выберите направление",
+                            error: nil,
+                            systemImage: "tag"
+                        ) {
+                            isDirectionPickerPresented = true
+                        }
 
                         EventLabeledMultilineField(
                             title: "Описание",
@@ -228,6 +239,19 @@ struct EventFormView: View {
                 ProgressView("Загрузка...")
                     .presentationDetents([.height(180)])
             }
+        }
+        .confirmationDialog(
+            "Направление",
+            isPresented: $isDirectionPickerPresented,
+            titleVisibility: .visible
+        ) {
+            ForEach(EventDirectionOption.allCases) { direction in
+                Button(direction.rawValue) {
+                    viewModel.selectedDirection = direction.rawValue
+                }
+            }
+
+            Button("Отмена", role: .cancel) { }
         }
         .sheet(item: $activePicker) { picker in
             EventDateTimePickerSheet(

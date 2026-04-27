@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class CreateEventRequest(BaseModel):
     title: str = Field(min_length=1, max_length=255)
+    direction: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1)
     country: str = Field(min_length=1, max_length=100)
     city: str = Field(min_length=1, max_length=100)
@@ -16,7 +17,7 @@ class CreateEventRequest(BaseModel):
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     volunteers_needed: int = Field(ge=1, le=100000, alias="volunteersNeeded")
 
-    @field_validator("title", "description", "country", "city", "location_name")
+    @field_validator("title", "direction", "description", "country", "city", "location_name")
     @classmethod
     def strip_strings(cls, value: str) -> str:
         value = value.strip()
@@ -44,6 +45,7 @@ class EventResponse(BaseModel):
 
     id: str
     title: str
+    direction: str | None = None
     description: str
     country: str
     city: str

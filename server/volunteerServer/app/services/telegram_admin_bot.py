@@ -735,6 +735,7 @@ class TelegramAdminBot:
     @classmethod
     def _event_text(cls, event: Event, creator: User) -> str:
         title = cls._safe(event.title)
+        direction = cls._safe(event.directions[0].name if event.directions else "Не указано")
         description = cls._safe(event.description)
         location = cls._safe(build_location_display(event.location_name, event.city, event.country))
         username = cls._safe(creator.username)
@@ -749,6 +750,7 @@ class TelegramAdminBot:
             "<b>Новое событие на подтверждение</b>\n\n"
             f"Пользователь: {username}\n"
             f"Название: {title}\n"
+            f"Направление: {direction}\n"
             f"Описание: {description}\n"
             f"Место: {location}\n"
             f"Координаты: {latitude}, {longitude}\n"

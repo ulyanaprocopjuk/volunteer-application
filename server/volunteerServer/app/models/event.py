@@ -10,7 +10,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 if TYPE_CHECKING:
+    from .direction import Direction
     from .user import User
+
+from .associations import events_direction
 
 
 class Event(Base):
@@ -49,3 +52,8 @@ class Event(Base):
     )
 
     creator: Mapped[User] = relationship("User", back_populates="events", foreign_keys=[creator_id])
+    directions: Mapped[list[Direction]] = relationship(
+        "Direction",
+        secondary=events_direction,
+        backref="events",
+    )

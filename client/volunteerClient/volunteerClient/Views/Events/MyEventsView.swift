@@ -196,6 +196,11 @@ struct MyEventCard: View {
         VStack(alignment: .leading, spacing: 0) {
             topBlock
 
+            if !directionText.isEmpty {
+                directionRow
+                    .padding(.top, 16)
+            }
+
             HStack(alignment: .center, spacing: 14) {
                 VStack(alignment: .leading, spacing: 12) {
                     infoRow(icon: "calendar", text: dateRangeText)
@@ -215,7 +220,7 @@ struct MyEventCard: View {
 
                 organizerBlock
             }
-            .padding(.top, 22)
+            .padding(.top, directionText.isEmpty ? 22 : 16)
         }
         .padding(16)
         .background(Color.white)
@@ -304,6 +309,23 @@ struct MyEventCard: View {
 
             Spacer(minLength: 0)
         }
+    }
+
+    private var directionRow: some View {
+        HStack(spacing: 6) {
+            Text("Направление:")
+                .font(.system(size: 14, weight: .regular, design: .serif))
+                .foregroundColor(.black.opacity(0.55))
+
+            Text(directionText)
+                .font(.system(size: 14, weight: .semibold, design: .serif))
+                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                .lineLimit(2)
+        }
+    }
+
+    private var directionText: String {
+        event.direction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private var displayTitle: String {
@@ -513,6 +535,7 @@ private struct MyEventsPreviewScreen: View {
             EventResponse(
                 id: "1",
                 title: "Музыкальный фестиваль",
+                direction: EventDirectionOption.culture.rawValue,
                 description: "Помощь с гостями и площадками",
                 country: "Беларусь",
                 city: "Минск",
@@ -531,6 +554,7 @@ private struct MyEventsPreviewScreen: View {
             EventResponse(
                 id: "2",
                 title: "Помощь приюту",
+                direction: EventDirectionOption.animals.rawValue,
                 description: "Уборка и выгул собак",
                 country: "Россия",
                 city: "Москва",
@@ -549,6 +573,7 @@ private struct MyEventsPreviewScreen: View {
             EventResponse(
                 id: "3",
                 title: "Сбор вещей для центра поддержки",
+                direction: EventDirectionOption.social.rawValue,
                 description: "Сортировка и прием вещей",
                 country: "Казахстан",
                 city: "Алматы",
@@ -567,6 +592,7 @@ private struct MyEventsPreviewScreen: View {
             EventResponse(
                 id: "4",
                 title: "Городской субботник",
+                direction: EventDirectionOption.ecology.rawValue,
                 description: "Помощь с уборкой парка",
                 country: "Беларусь",
                 city: "Гродно",

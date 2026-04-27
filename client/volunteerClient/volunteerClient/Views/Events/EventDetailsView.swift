@@ -61,12 +61,17 @@ struct EventDetailsView: View {
         VStack(alignment: .leading, spacing: 0) {
             topBlock
 
+            if !displayDirection.isEmpty {
+                directionRow
+                    .padding(.top, 18)
+            }
+
             if !displayDescription.isEmpty {
                 Text(displayDescription)
                     .font(.system(size: 13, weight: .regular, design: .serif))
                     .foregroundColor(.black.opacity(0.62))
                     .lineSpacing(8)
-                    .padding(.top, 26)
+                    .padding(.top, displayDirection.isEmpty ? 26 : 18)
             }
 
             infoBlock
@@ -190,6 +195,19 @@ struct EventDetailsView: View {
         }
     }
 
+    private var directionRow: some View {
+        HStack(spacing: 8) {
+            Text("Направление:")
+                .font(.system(size: 14, weight: .regular, design: .serif))
+                .foregroundColor(.black.opacity(0.55))
+
+            Text(displayDirection)
+                .font(.system(size: 14, weight: .semibold, design: .serif))
+                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var displayTitle: String {
         let value = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? "Без названия" : value
@@ -197,6 +215,10 @@ struct EventDetailsView: View {
 
     private var displayDescription: String {
         event.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var displayDirection: String {
+        event.direction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private var displayLocation: String {
@@ -282,6 +304,7 @@ struct EventDetailsView: View {
         event: EventResponse(
             id: "1",
             title: "Музыкальный фестиваль",
+            direction: EventDirectionOption.culture.rawValue,
             description: "Описание события",
             country: "Беларусь",
             city: "Минск",

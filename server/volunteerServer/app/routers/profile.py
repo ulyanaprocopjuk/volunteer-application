@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db import get_db
-from app.models import Profile, ProfileType, User
+from app.models import Profile, ProfileType, Skill, User
 from app.schemas import ProfileResponse, ProfileUpsertRequest
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
@@ -35,12 +35,12 @@ def upsert_profile(
         profile.first_name = payload.first_name
         profile.last_name = payload.last_name
         profile.organization_name = None
-        profile.skills = payload.skills or []
+        profile.skill_refs = _resolve_skill_refs(db, payload.skills or [])
     else:
         profile.first_name = None
         profile.last_name = None
         profile.organization_name = payload.organization_name
-        profile.skills = []
+        profile.skill_refs = []
 
     db.commit()
     db.refresh(profile)
@@ -59,3 +59,13 @@ def get_my_profile(
             detail="Profile not found",
         )
     return profile
+
+
+def _resolve_skill_refs(db: Session, skill_names: list[str]) -> list[Skill]:
+    if not skill_names:
+        return []
+
+    ordered_names = list(dict.fromkeys(skill_names))
+    skills = db.scalars(select(Skill).where(Skill.name.in_(ordered_names))).all()
+    skills_by_name = {skill.name: skill for skill in skills}
+    return [skills_by_name[name] for name in ordered_names if name in skills_by_name]

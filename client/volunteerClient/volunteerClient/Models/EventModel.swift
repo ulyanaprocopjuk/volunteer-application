@@ -3,6 +3,7 @@ import CoreLocation
 
 struct CreateEventRequest: Encodable {
     let title: String
+    let direction: String
     let description: String
     let country: String
     let city: String
@@ -18,6 +19,7 @@ struct CreateEventRequest: Encodable {
 struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     let id: String
     let title: String
+    let direction: String?
     let description: String
     let country: String
     let city: String
@@ -36,6 +38,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id
         case title
+        case direction
         case description
         case country
         case city
@@ -51,6 +54,21 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         case organizerName
         case createdAt = "created_at"
     }
+}
+
+enum EventDirectionOption: String, CaseIterable, Identifiable {
+    case animals = "Животные"
+    case ecology = "Экология"
+    case elderly = "Пожилые люди"
+    case children = "Дети и подростки"
+    case disability = "Люди с инвалидностью"
+    case humanitarian = "Гуманитарная помощь"
+    case education = "Образование"
+    case medicine = "Медицина и здоровье"
+    case culture = "Культура и мероприятия"
+    case social = "Социальная помощь"
+
+    var id: String { rawValue }
 }
 
 struct EventPhotoUploadResponse: Decodable {

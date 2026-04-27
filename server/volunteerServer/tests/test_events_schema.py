@@ -11,6 +11,7 @@ class EventSchemaTests(unittest.TestCase):
         payload = CreateEventRequest.model_validate(
             {
                 "title": "Cleanup",
+                "direction": "Экология",
                 "description": "Park cleanup",
                 "country": "Беларусь",
                 "city": "Минск",
@@ -29,6 +30,7 @@ class EventSchemaTests(unittest.TestCase):
             CreateEventRequest.model_validate(
                 {
                     "title": "Cleanup",
+                    "direction": "Экология",
                     "description": "Park cleanup",
                     "country": "Беларусь",
                     "city": "Минск",

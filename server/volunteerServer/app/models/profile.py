@@ -4,13 +4,16 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
 if TYPE_CHECKING:
+    from .skill import Skill
     from .user import User
+
+from .associations import volunteer_skills
 
 
 class ProfileType(str, enum.Enum):
@@ -40,7 +43,6 @@ class Profile(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     country: Mapped[str] = mapped_column(String(100), nullable=False)
-    skills: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     about: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -58,3 +60,12 @@ class Profile(Base):
         "User",
         back_populates="profile",
     )
+    skill_refs: Mapped[list[Skill]] = relationship(
+        "Skill",
+        secondary=volunteer_skills,
+        backref="volunteers",
+    )
+
+    @property
+    def skills(self) -> list[str]:
+        return [skill.name for skill in self.skill_refs]

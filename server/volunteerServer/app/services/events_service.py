@@ -6,7 +6,7 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Event, Profile, User
+from app.models import Direction, Event, Profile, User
 from app.schemas import CreateEventRequest, CurrentCountryEventResponse, EventResponse
 from app.services.geocoding_service import COUNTRY_ALIASES
 from app.services.location_display import build_location_display
@@ -25,6 +25,8 @@ class EventService:
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is blocked")
 
+        direction = self._direction_by_name(db, payload.direction)
+
         event = Event(
             creator_id=user.id,
             title=payload.title,
@@ -40,6 +42,7 @@ class EventService:
             volunteers_needed=payload.volunteers_needed,
             status="pending",
         )
+        event.directions.append(direction)
 
         db.add(event)
         db.flush()
@@ -59,8 +62,7 @@ class EventService:
                 event.id,
             )
 
-        response = EventResponse.model_validate(event)
-        response.organizer_name = self._organizer_name(user)
+        response = self._response(event)
         response.message = "Событие отправлено для подтверждения, ожидайте."
         return response
 
@@ -178,6 +180,7 @@ class EventService:
                     Event.country.ilike(search_pattern),
                     Event.city.ilike(search_pattern),
                     Event.location_name.ilike(search_pattern),
+                    Event.directions.any(Direction.name.ilike(search_pattern)),
                 )
             )
 
@@ -202,8 +205,30 @@ class EventService:
 
     def _response(self, event: Event) -> EventResponse:
         response = EventResponse.model_validate(event)
+        response.direction = self._event_direction_name(event)
         response.organizer_name = self._organizer_name(event.creator)
         return response
+
+    @staticmethod
+    def _event_direction_name(event: Event) -> str | None:
+        if not event.directions:
+            return None
+        return event.directions[0].name
+
+    @staticmethod
+    def _direction_by_name(db: Session, direction_name: str) -> Direction:
+        normalized_direction = " ".join(direction_name.split())
+        direction = db.scalar(
+            select(Direction).where(func.lower(Direction.name) == normalized_direction.lower())
+        )
+
+        if direction is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid event direction",
+            )
+
+        return direction
 
     def _mark_completed_events(self, db: Session, now: datetime | None = None) -> None:
         current_time = now or datetime.now(UTC)

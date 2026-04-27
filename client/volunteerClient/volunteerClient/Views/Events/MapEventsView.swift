@@ -178,6 +178,13 @@ private struct EventMapPreviewCard: View {
                     .font(.system(size: 13, weight: .regular, design: .serif))
                     .foregroundColor(.black.opacity(0.62))
 
+                if !directionText.isEmpty {
+                    Text(directionText)
+                        .font(.system(size: 13, weight: .semibold, design: .serif))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .lineLimit(1)
+                }
+
                 Text(locationText)
                     .font(.system(size: 13, weight: .regular, design: .serif))
                     .foregroundColor(.black.opacity(0.55))
@@ -213,6 +220,10 @@ private struct EventMapPreviewCard: View {
     private var locationText: String {
         let location = event.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
         return location.isEmpty ? "\(event.country), \(event.city)" : location
+    }
+
+    private var directionText: String {
+        event.direction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private var startDate: Date {

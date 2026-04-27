@@ -84,13 +84,17 @@ struct EventConfirmView: View {
         VStack(alignment: .leading, spacing: 0) {
             topBlock
 
+            if !displayDirection.isEmpty {
+                directionRow
+                    .padding(.top, 18)
+            }
+
             if !displayDescription.isEmpty {
                 Text(displayDescription)
                     .font(.system(size: 13, weight: .regular, design: .serif))
                     .foregroundColor(.black.opacity(0.62))
                     .lineSpacing(8)
-
-                    .padding(.top, 26)
+                    .padding(.top, displayDirection.isEmpty ? 26 : 18)
             }
 
             infoBlock
@@ -204,6 +208,19 @@ struct EventConfirmView: View {
         }
     }
 
+    private var directionRow: some View {
+        HStack(spacing: 8) {
+            Text("Направление:")
+                .font(.system(size: 14, weight: .regular, design: .serif))
+                .foregroundColor(.black.opacity(0.55))
+
+            Text(displayDirection)
+                .font(.system(size: 14, weight: .semibold, design: .serif))
+                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var confirmButton: some View {
         Button {
             Task {
@@ -251,6 +268,10 @@ struct EventConfirmView: View {
 
     private var displayDescription: String {
         viewModel.eventDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var displayDirection: String {
+        viewModel.selectedDirection.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var displayLocation: String {
@@ -313,6 +334,7 @@ struct EventConfirmView: View {
 #Preview {
     let vm = EventViewModel(session: AppSession())
     vm.eventTitle = "Музыкальный фестиваль"
+    vm.selectedDirection = EventDirectionOption.culture.rawValue
     vm.eventDescription = """
 Помогите в организации фестиваля, координации гостей и работе площадок. Нам нужны активные и ответственные волонтёры, готовые поддержать мероприятие и создать комфортную атмосферу для всех участников.
 """
