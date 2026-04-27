@@ -183,7 +183,7 @@ private enum MyEventsSegment: CaseIterable {
     }
 }
 
-private struct MyEventCard: View {
+struct MyEventCard: View {
     let event: EventResponse
 
     private let eventImageSize: CGFloat = 56

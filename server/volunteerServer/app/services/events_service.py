@@ -148,6 +148,42 @@ class EventService:
             for event in events
         ]
 
+    def list_event_feed(
+        self,
+        db: Session,
+        *,
+        search_query: str | None = None,
+    ) -> list[EventResponse]:
+        now = datetime.now(UTC)
+        self._mark_completed_events(db, now=now)
+        comparison_time = self._database_comparison_time(db, now)
+        event_end = func.coalesce(Event.ends_at, Event.starts_at)
+
+        query = (
+            select(Event)
+            .where(
+                func.lower(Event.status).in_(("approved", "active")),
+                event_end >= comparison_time,
+            )
+            .order_by(Event.starts_at.asc(), Event.created_at.desc())
+        )
+
+        normalized_query = (search_query or "").strip()
+        if normalized_query:
+            search_pattern = f"%{normalized_query}%"
+            query = query.where(
+                or_(
+                    Event.title.ilike(search_pattern),
+                    Event.description.ilike(search_pattern),
+                    Event.country.ilike(search_pattern),
+                    Event.city.ilike(search_pattern),
+                    Event.location_name.ilike(search_pattern),
+                )
+            )
+
+        events = db.scalars(query).all()
+        return [self._response(event) for event in events]
+
     def list_events_for_current_user_country(
         self,
         db: Session,

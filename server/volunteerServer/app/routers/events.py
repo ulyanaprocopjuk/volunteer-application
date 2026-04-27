@@ -39,6 +39,14 @@ def list_current_country_events(
     return event_service.list_events_for_current_user_country(db, current_user)
 
 
+@router.get("/feed", response_model=list[EventResponse])
+def list_event_feed(
+    db: Annotated[Session, Depends(get_db)],
+    q: str | None = Query(default=None),
+):
+    return event_service.list_event_feed(db, search_query=q)
+
+
 @router.get("", response_model=list[CurrentCountryEventResponse])
 def list_events(
     db: Annotated[Session, Depends(get_db)],

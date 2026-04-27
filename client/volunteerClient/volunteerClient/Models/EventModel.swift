@@ -15,7 +15,7 @@ struct CreateEventRequest: Encodable {
     let volunteersNeeded: Int
 }
 
-struct EventResponse: Decodable, Identifiable, Hashable {
+struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let description: String
