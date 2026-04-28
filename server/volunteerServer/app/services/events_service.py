@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import and_, func, or_, select, update
@@ -155,6 +155,10 @@ class EventService:
         db: Session,
         *,
         search_query: str | None = None,
+        direction: str | None = None,
+        when: str | None = None,
+        country: str | None = None,
+        city: str | None = None,
     ) -> list[EventResponse]:
         now = datetime.now(UTC)
         self._mark_completed_events(db, now=now)
@@ -183,6 +187,30 @@ class EventService:
                     Event.directions.any(Direction.name.ilike(search_pattern)),
                 )
             )
+
+        normalized_direction = (direction or "").strip()
+        if normalized_direction:
+            query = query.where(
+                Event.directions.any(func.lower(Direction.name) == normalized_direction.lower())
+            )
+
+        normalized_when = (when or "").strip().lower()
+        if normalized_when:
+            time_range = self._event_time_range(now, normalized_when)
+            if time_range is not None:
+                range_start, range_end = time_range
+                query = query.where(
+                    Event.starts_at < self._database_comparison_time(db, range_end),
+                    event_end >= self._database_comparison_time(db, range_start),
+                )
+
+        if country:
+            country_variants = self._country_variants(country)
+            query = query.where(or_(*[Event.country.ilike(value) for value in country_variants]))
+
+        normalized_city = (city or "").strip()
+        if normalized_city:
+            query = query.where(Event.city.ilike(normalized_city))
 
         events = db.scalars(query).all()
         return [self._response(event) for event in events]
@@ -255,6 +283,27 @@ class EventService:
         if db.bind is not None and db.bind.dialect.name == "sqlite":
             return value.replace(tzinfo=None)
         return value
+
+    @staticmethod
+    def _event_time_range(now: datetime, value: str) -> tuple[datetime, datetime] | None:
+        day_start = datetime.combine(now.date(), time.min, tzinfo=UTC)
+
+        if value == "today":
+            return day_start, day_start + timedelta(days=1)
+
+        if value == "tomorrow":
+            tomorrow = day_start + timedelta(days=1)
+            return tomorrow, tomorrow + timedelta(days=1)
+
+        if value == "weekend":
+            if day_start.weekday() == 6:
+                saturday = day_start - timedelta(days=1)
+            else:
+                days_until_saturday = (5 - day_start.weekday()) % 7
+                saturday = day_start + timedelta(days=days_until_saturday)
+            return saturday, saturday + timedelta(days=2)
+
+        return None
 
     @staticmethod
     def _organizer_name(user: User | None) -> str | None:

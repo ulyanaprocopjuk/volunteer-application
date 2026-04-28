@@ -84,6 +84,42 @@ enum MyEventsFilter: String {
     case history
 }
 
+enum EventFeedTimeFilter: String, CaseIterable, Identifiable {
+    case any
+    case today
+    case tomorrow
+    case weekend
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .any:
+            return "Любое время"
+        case .today:
+            return "Сегодня"
+        case .tomorrow:
+            return "Завтра"
+        case .weekend:
+            return "Выходные"
+        }
+    }
+}
+
+struct EventFeedFilters {
+    var direction: String?
+    var time: EventFeedTimeFilter
+    var country: String?
+    var city: String?
+
+    static let empty = EventFeedFilters(
+        direction: nil,
+        time: .any,
+        country: nil,
+        city: nil
+    )
+}
+
 struct CurrentCountryEventResponse: Decodable, Identifiable {
     let id: String
     let title: String

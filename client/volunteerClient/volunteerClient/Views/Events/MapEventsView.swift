@@ -8,55 +8,65 @@ struct MapEventsView: View {
     var onNotificationsTap: () -> Void = {}
     var hasNotifications: Bool = false
 
-    @StateObject private var viewModel = MapEventsViewModel()
+    @StateObject private var viewModel: MapEventsViewModel
     @State private var selectedEvent: EventResponse?
     @State private var detailsEvent: EventResponse?
+    @State private var isLocationFilterPresented = false
+    @State private var isFullMapPresented = false
+
+    init(
+        session: AppSession? = nil,
+        onCreateEventTap: @escaping () -> Void = {},
+        onNotificationsTap: @escaping () -> Void = {},
+        hasNotifications: Bool = false
+    ) {
+        self.onCreateEventTap = onCreateEventTap
+        self.onNotificationsTap = onNotificationsTap
+        self.hasNotifications = hasNotifications
+        _viewModel = StateObject(wrappedValue: MapEventsViewModel(session: session))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             headerView
 
-            ZStack(alignment: .bottom) {
-                EventsMapView(
-                    events: viewModel.events,
-                    selectedEventID: selectedEvent?.id,
-                    fallbackCoordinate: viewModel.fallbackCoordinate,
-                    onSelectEvent: { event in
-                        selectedEvent = event
-                    },
-                    onTapMap: {
-                        selectedEvent = nil
-                    }
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 16)
+            GeometryReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        mapCard
+                            .frame(height: max(260, min(360, proxy.size.height * 0.40)))
+                            .padding(.horizontal, 20)
+                            .padding(.top, 18)
 
-                if viewModel.isLoading && viewModel.events.isEmpty {
-                    ProgressView()
-                        .padding(14)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
-                }
+                        filtersView
 
-                if let selectedEvent {
-                    Button {
-                        detailsEvent = selectedEvent
-                    } label: {
-                        EventMapPreviewCard(event: selectedEvent)
+                        statisticsView
+                            .padding(.horizontal, 20)
+                            .padding(.top, 4)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 28)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.bottom, 150)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color.white.ignoresSafeArea())
         .task {
-            await viewModel.loadEvents()
+            await viewModel.loadInitialData()
+        }
+        .sheet(isPresented: $isLocationFilterPresented) {
+            LocationSelectionSheet(
+                country: Binding(
+                    get: { viewModel.selectedCountry },
+                    set: { viewModel.updateCountry($0) }
+                ),
+                city: Binding(
+                    get: { viewModel.selectedCity },
+                    set: { viewModel.updateCity($0) }
+                ),
+                countries: CityDirectory.countries
+            )
+            .onDisappear {
+                Task { await viewModel.applyFilters() }
+            }
         }
         .alert("Ошибка", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
@@ -69,32 +79,234 @@ struct MapEventsView: View {
         .fullScreenCover(item: $detailsEvent) { event in
             EventDetailsView(event: event)
         }
+        .fullScreenCover(isPresented: $isFullMapPresented) {
+            FullScreenEventsMapView(
+                events: viewModel.events,
+                fallbackCoordinate: viewModel.mapCenterCoordinate
+            )
+        }
+    }
+
+    private var mapCard: some View {
+        VStack(spacing: 0) {
+            mapBlock
+
+            HStack {
+                Text(viewModel.locationFilterText)
+                    .font(.system(size: 14, weight: .medium, design: .serif))
+                    .foregroundColor(.black.opacity(0.62))
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button {
+                    isFullMapPresented = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Открыть карту")
+                        Image(systemName: "arrow.up.right")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 48)
+            .background(Color.white)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 14, y: 7)
+    }
+
+    private var mapBlock: some View {
+        ZStack(alignment: .bottom) {
+            EventsMapView(
+                events: viewModel.events,
+                selectedEventID: selectedEvent?.id,
+                fallbackCoordinate: viewModel.mapCenterCoordinate,
+                onSelectEvent: { event in
+                    selectedEvent = event
+                },
+                onTapMap: {
+                    selectedEvent = nil
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+            if viewModel.isLoading {
+                ProgressView()
+                    .padding(14)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .padding(.bottom, selectedEvent == nil ? 18 : 112)
+            }
+
+            if let selectedEvent {
+                Button {
+                    detailsEvent = selectedEvent
+                } label: {
+                    EventMapPreviewCard(event: selectedEvent)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var filtersView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 24) {
+                    Menu {
+                        Button("Любое направление") {
+                            Task { await viewModel.selectDirection(nil) }
+                        }
+
+                        ForEach(EventDirectionOption.allCases) { direction in
+                            Button(direction.rawValue) {
+                                Task { await viewModel.selectDirection(direction.rawValue) }
+                            }
+                        }
+                    } label: {
+                        filterChip(
+                            title: viewModel.directionFilterTitle,
+                            isActive: viewModel.selectedDirection != nil
+                        )
+                    }
+
+                    Menu {
+                        ForEach(EventFeedTimeFilter.allCases) { filter in
+                            Button(filter.title) {
+                                Task { await viewModel.selectTimeFilter(filter) }
+                            }
+                        }
+                    } label: {
+                        filterChip(
+                            title: viewModel.timeFilterTitle,
+                            isActive: viewModel.selectedTimeFilter != .any
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                Button {
+                    isLocationFilterPresented = true
+                } label: {
+                    filterChip(
+                        title: viewModel.locationFilterTitle,
+                        isActive: viewModel.isLocationFilterActive
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    private func filterChip(title: String, isActive: Bool) -> some View {
+        let accentColor = Color(red: 44/255, green: 67/255, blue: 102/255)
+
+        return HStack(spacing: 7) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(isActive ? .white : accentColor)
+                .lineLimit(1)
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(isActive ? .white.opacity(0.78) : accentColor.opacity(0.62))
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 42)
+        .background(isActive ? accentColor : Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(
+                    isActive ? accentColor : Color(red: 68/255, green: 185/255, blue: 255/255).opacity(0.65),
+                    lineWidth: 1
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(isActive ? 0.09 : 0.04), radius: 7, y: 3)
+    }
+
+    private var statisticsView: some View {
+        Group {
+            if viewModel.events.isEmpty && !viewModel.isLoading {
+                emptyStateView
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(viewModel.events.isEmpty ? "Событий не найдено" : "Найдено событий \(viewModel.events.count)")
+                        .font(.system(size: 18, weight: .semibold, design: .serif))
+                        .foregroundColor(.black.opacity(0.78))
+
+                    ForEach(viewModel.events.prefix(3)) { event in
+                        HStack(alignment: .top, spacing: 10) {
+                            Circle()
+                                .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                .frame(width: 6, height: 6)
+                                .padding(.top, 7)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(event.title)
+                                    .font(.system(size: 15, weight: .semibold, design: .serif))
+                                    .foregroundColor(.black.opacity(0.75))
+                                    .lineLimit(2)
+
+                                Text(event.shortMapSummary)
+                                    .font(.system(size: 13, weight: .regular, design: .serif))
+                                    .foregroundColor(.black.opacity(0.55))
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+        }
+    }
+
+    private var emptyStateView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: "map")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+            Text("Событий не найдено")
+                .font(.system(size: 20, weight: .semibold, design: .serif))
+                .foregroundColor(.black.opacity(0.80))
+
+            Text("Попробуйте изменить фильтры или создайте новое событие помощи.")
+                .font(.system(size: 15, weight: .regular, design: .serif))
+                .foregroundColor(.black.opacity(0.58))
+                .lineSpacing(4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private var headerView: some View {
-        ZStack {
-            Color(.systemGray6)
-                .ignoresSafeArea(edges: .top)
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Помощь рядом")
+                        .font(.system(size: 30, weight: .bold, design: .serif))
+                        .foregroundColor(.black.opacity(0.86))
 
-            Text("Главная страница")
-                .font(.system(size: 20, weight: .semibold, design: .serif))
-                .foregroundColor(.black.opacity(0.78))
-
-            HStack {
-                Button {
-                    onCreateEventTap()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.black.opacity(0.75))
-                        .frame(width: 36, height: 36)
-                        .background(
-                            Circle()
-                                .stroke(Color.black.opacity(0.35), lineWidth: 1)
-                                .background(Circle().fill(Color.clear))
-                        )
+                    Text("Найдите события, где нужна помощь")
+                        .font(.system(size: 15, weight: .regular, design: .serif))
+                        .foregroundColor(.black.opacity(0.56))
                 }
-                .buttonStyle(.plain)
 
                 Spacer()
 
@@ -105,28 +317,132 @@ struct MapEventsView: View {
                         Image(systemName: "bell.fill")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(.black.opacity(0.75))
-                            .frame(width: 36, height: 36)
-                            .background(
+                            .frame(width: 42, height: 42)
+                            .background(Circle().fill(Color.white))
+                            .overlay(
                                 Circle()
-                                    .stroke(Color.black.opacity(0.35), lineWidth: 1)
-                                    .background(Circle().fill(Color.clear))
+                                    .stroke(Color.black.opacity(0.12), lineWidth: 1)
                             )
 
                         if hasNotifications {
                             Circle()
                                 .fill(Color.red)
                                 .frame(width: 9, height: 9)
-                                .offset(x: -4, y: 4)
+                                .offset(x: -5, y: 5)
                         }
                     }
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 20)
+
+            Button {
+                onCreateEventTap()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 19, weight: .semibold))
+
+                    Text("Создать событие помощи")
+                        .font(.system(size: 16, weight: .semibold))
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .opacity(0.75)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                )
+                .shadow(color: Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.18), radius: 10, y: 5)
+            }
+            .buttonStyle(.plain)
         }
-        .frame(height: 60)
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 18)
+        .background(Color(.systemGray6).ignoresSafeArea(edges: .top))
         .overlay(alignment: .bottom) {
             Divider()
+        }
+    }
+}
+
+private struct FullScreenEventsMapView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let events: [EventResponse]
+    let fallbackCoordinate: CLLocationCoordinate2D
+
+    @State private var selectedEvent: EventResponse?
+    @State private var detailsEvent: EventResponse?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Text("Карта событий")
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.78))
+
+                HStack {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.black.opacity(0.75))
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(Color.white))
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black.opacity(0.12), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 18)
+            }
+            .frame(height: 62)
+            .background(Color(.systemGray6).ignoresSafeArea(edges: .top))
+            .overlay(alignment: .bottom) {
+                Divider()
+            }
+
+            ZStack(alignment: .bottom) {
+                EventsMapView(
+                    events: events,
+                    selectedEventID: selectedEvent?.id,
+                    fallbackCoordinate: fallbackCoordinate,
+                    onSelectEvent: { event in
+                        selectedEvent = event
+                    },
+                    onTapMap: {
+                        selectedEvent = nil
+                    }
+                )
+                .ignoresSafeArea(edges: .bottom)
+
+                if let selectedEvent {
+                    Button {
+                        detailsEvent = selectedEvent
+                    } label: {
+                        EventMapPreviewCard(event: selectedEvent)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 22)
+                }
+            }
+        }
+        .background(Color.white.ignoresSafeArea())
+        .fullScreenCover(item: $detailsEvent) { event in
+            EventDetailsView(event: event)
         }
     }
 }
@@ -135,25 +451,178 @@ struct MapEventsView: View {
 private final class MapEventsViewModel: ObservableObject {
     @Published private(set) var events: [EventResponse] = []
     @Published private(set) var isLoading = false
+    @Published var selectedDirection: String?
+    @Published var selectedTimeFilter: EventFeedTimeFilter = .any
+    @Published var selectedCountry: String
+    @Published var selectedCity: String
     @Published var errorMessage: String?
+    @Published private(set) var isLocationFilterActive = false
+    @Published private(set) var mapCenterCoordinate: CLLocationCoordinate2D
 
-    let fallbackCoordinate = CLLocationCoordinate2D(latitude: 53.9023, longitude: 27.5619)
-
+    private let session: AppSession?
     private let api: EventAPIProtocol
+    private let profileAPI: ProfileAPIProtocol
+    private let geocodingAPI: GeocodingAPIProtocol
+    private var hasLoadedContext = false
+    private var activeRequestID = UUID()
 
-    init(api: EventAPIProtocol? = nil) {
+    init(
+        session: AppSession? = nil,
+        api: EventAPIProtocol? = nil,
+        profileAPI: ProfileAPIProtocol? = nil,
+        geocodingAPI: GeocodingAPIProtocol? = nil
+    ) {
+        let defaultCountry = CityDirectory.defaultCountry
+        let defaultCity = CityDirectory.cities(for: defaultCountry).first ?? ""
+        self.session = session
         self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.profileAPI = profileAPI ?? ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.geocodingAPI = geocodingAPI ?? GeocodingAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.selectedCountry = defaultCountry
+        self.selectedCity = defaultCity
+        self.mapCenterCoordinate = CityDirectory.searchArea(for: defaultCountry).center
     }
 
-    func loadEvents() async {
+    var locationFilterText: String {
+        let country = selectedCountry.trimmingCharacters(in: .whitespacesAndNewlines)
+        let city = selectedCity.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !country.isEmpty && !city.isEmpty {
+            return "\(country), \(city)"
+        }
+
+        return country.isEmpty ? "Любое" : country
+    }
+
+    var directionFilterTitle: String {
+        selectedDirection?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? selectedDirection!
+            : "Направление"
+    }
+
+    var timeFilterTitle: String {
+        selectedTimeFilter == .any ? "Когда" : selectedTimeFilter.title
+    }
+
+    var locationFilterTitle: String {
+        isLocationFilterActive ? locationFilterText : "Расположение"
+    }
+
+    func loadInitialData() async {
+        guard !hasLoadedContext else {
+            await loadEvents()
+            return
+        }
+
+        hasLoadedContext = true
+        await loadProfileLocation()
+        await updateMapCenter()
+        await loadEvents()
+    }
+
+    func selectDirection(_ direction: String?) async {
+        selectedDirection = direction
+        await applyFilters()
+    }
+
+    func selectTimeFilter(_ filter: EventFeedTimeFilter) async {
+        selectedTimeFilter = filter
+        await applyFilters()
+    }
+
+    func updateCountry(_ country: String) {
+        isLocationFilterActive = true
+        selectedCountry = CityDirectory.canonicalCountryName(for: country)
+        let cities = CityDirectory.cities(for: selectedCountry)
+        if !cities.contains(selectedCity) {
+            selectedCity = cities.first ?? ""
+        }
+    }
+
+    func updateCity(_ city: String) {
+        isLocationFilterActive = true
+        selectedCity = city
+    }
+
+    func applyFilters() async {
+        await updateMapCenter()
+        await loadEvents()
+    }
+
+    private func loadEvents() async {
+        let requestID = UUID()
+        activeRequestID = requestID
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
 
         do {
-            events = try await api.fetchEventFeed(searchText: nil, token: nil)
+            let filters = EventFeedFilters(
+                direction: selectedDirection,
+                time: selectedTimeFilter,
+                country: selectedCountry,
+                city: selectedCity
+            )
+            let loadedEvents = try await api.fetchEventFeed(
+                searchText: nil,
+                filters: filters,
+                token: nil
+            )
+
+            guard activeRequestID == requestID else { return }
+            events = loadedEvents
         } catch {
+            guard activeRequestID == requestID else { return }
+            events = []
             errorMessage = error.localizedDescription
+        }
+
+        if activeRequestID == requestID {
+            isLoading = false
+        }
+    }
+
+    private func loadProfileLocation() async {
+        guard let session else { return }
+
+        do {
+            let profile = try await session.performAuthorizedRequest { token in
+                try await profileAPI.fetchMyProfile(token: token)
+            }
+            let country = profile.country?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let city = profile.city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            if !country.isEmpty {
+                selectedCountry = CityDirectory.canonicalCountryName(for: country)
+            }
+
+            if !city.isEmpty {
+                selectedCity = city
+            } else {
+                selectedCity = CityDirectory.cities(for: selectedCountry).first ?? ""
+            }
+        } catch {
+            return
+        }
+    }
+
+    private func updateMapCenter() async {
+        let country = selectedCountry.trimmingCharacters(in: .whitespacesAndNewlines)
+        let city = selectedCity.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searchArea = CityDirectory.searchArea(for: country)
+
+        guard !city.isEmpty else {
+            mapCenterCoordinate = searchArea.center
+            return
+        }
+
+        do {
+            mapCenterCoordinate = try await geocodingAPI.geocodeCity(
+                city: city,
+                country: country,
+                area: searchArea
+            ) ?? searchArea.center
+        } catch {
+            mapCenterCoordinate = searchArea.center
         }
     }
 }
@@ -282,8 +751,11 @@ private struct EventsMapView: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         let eventIDs = events.map(\.id)
-        if context.coordinator.renderedEventIDs != eventIDs {
+        let fallbackKey = "\(fallbackCoordinate.latitude),\(fallbackCoordinate.longitude)"
+        if context.coordinator.renderedEventIDs != eventIDs
+            || context.coordinator.renderedFallbackKey != fallbackKey {
             context.coordinator.renderedEventIDs = eventIDs
+            context.coordinator.renderedFallbackKey = fallbackKey
             mapView.removeAnnotations(mapView.annotations)
             mapView.addAnnotations(events.map(EventMapAnnotation.init(event:)))
 
@@ -332,6 +804,7 @@ private struct EventsMapView: UIViewRepresentable {
         let onTapMap: () -> Void
 
         var renderedEventIDs: [String] = []
+        var renderedFallbackKey: String?
         var selectedEventID: String?
 
         init(
@@ -412,6 +885,34 @@ private extension EventResponse {
     nonisolated var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
+
+    var shortMapSummary: String {
+        let directionText = direction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let location = locationName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let place = location.isEmpty ? "\(city), \(country)" : location
+        let date = EventDateDisplayFormatter.dateRangeText(start: mapStartDate, end: mapEndDate)
+
+        if directionText.isEmpty {
+            return "\(date), \(place)"
+        }
+
+        return "\(directionText), \(date), \(place)"
+    }
+
+    private var mapStartDate: Date {
+        Self.mapISOFormatter.date(from: startsAt) ?? Date()
+    }
+
+    private var mapEndDate: Date? {
+        guard let endsAt else { return nil }
+        return Self.mapISOFormatter.date(from: endsAt)
+    }
+
+    private static let mapISOFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 }
 
 private extension Color {

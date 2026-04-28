@@ -5,6 +5,7 @@ protocol EventAPIProtocol {
     func createEvent(_ request: CreateEventRequest, token: String?) async throws -> EventResponse
     func fetchMyEvents(filter: MyEventsFilter?, token: String?) async throws -> [EventResponse]
     func fetchEventFeed(searchText: String?, token: String?) async throws -> [EventResponse]
+    func fetchEventFeed(searchText: String?, filters: EventFeedFilters, token: String?) async throws -> [EventResponse]
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -86,16 +87,42 @@ final class EventAPI: EventAPIProtocol {
     }
 
     func fetchEventFeed(searchText: String?, token: String?) async throws -> [EventResponse] {
+        try await fetchEventFeed(searchText: searchText, filters: .empty, token: token)
+    }
+
+    func fetchEventFeed(searchText: String?, filters: EventFeedFilters, token: String?) async throws -> [EventResponse] {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("api/events/feed"),
             resolvingAgainstBaseURL: false
         )
 
+        var queryItems: [URLQueryItem] = []
         let query = searchText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !query.isEmpty {
-            components?.queryItems = [
-                URLQueryItem(name: "q", value: query)
-            ]
+            queryItems.append(URLQueryItem(name: "q", value: query))
+        }
+
+        if let direction = filters.direction?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !direction.isEmpty {
+            queryItems.append(URLQueryItem(name: "direction", value: direction))
+        }
+
+        if filters.time != .any {
+            queryItems.append(URLQueryItem(name: "when", value: filters.time.rawValue))
+        }
+
+        if let country = filters.country?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !country.isEmpty {
+            queryItems.append(URLQueryItem(name: "country", value: country))
+        }
+
+        if let city = filters.city?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !city.isEmpty {
+            queryItems.append(URLQueryItem(name: "city", value: city))
+        }
+
+        if !queryItems.isEmpty {
+            components?.queryItems = queryItems
         }
 
         guard let url = components?.url else {

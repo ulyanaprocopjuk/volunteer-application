@@ -43,8 +43,19 @@ def list_current_country_events(
 def list_event_feed(
     db: Annotated[Session, Depends(get_db)],
     q: str | None = Query(default=None),
+    direction: str | None = Query(default=None),
+    when: str | None = Query(default=None, pattern="^(today|tomorrow|weekend|any)$"),
+    country: str | None = Query(default=None),
+    city: str | None = Query(default=None),
 ):
-    return event_service.list_event_feed(db, search_query=q)
+    return event_service.list_event_feed(
+        db,
+        search_query=q,
+        direction=direction,
+        when=None if when == "any" else when,
+        country=country,
+        city=city,
+    )
 
 
 @router.get("", response_model=list[CurrentCountryEventResponse])

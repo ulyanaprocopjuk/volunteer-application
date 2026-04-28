@@ -103,6 +103,7 @@ struct HomePageView: View {
 
         case .map:
             MapEventsView(
+                session: session,
                 onCreateEventTap: {
                     isEventFormPresented = true
                 },

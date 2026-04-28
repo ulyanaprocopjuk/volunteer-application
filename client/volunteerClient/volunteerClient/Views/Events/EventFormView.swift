@@ -10,7 +10,6 @@ struct EventFormView: View {
 
     @State private var isLocationSheetPresented = false
     @State private var isConfirmPresented = false
-    @State private var isDirectionPickerPresented = false
     @State private var activePicker: ActivePicker?
     @State private var selectedPhotoItem: PhotosPickerItem?
 
@@ -63,15 +62,12 @@ struct EventFormView: View {
                             placeholder: "Введите название события"
                         )
 
-                        EventPickerField(
+                        EventDirectionDropdownField(
                             title: "Направление",
-                            value: viewModel.selectedDirection,
-                            placeholder: "Выберите направление",
-                            error: nil,
-                            systemImage: "tag"
-                        ) {
-                            isDirectionPickerPresented = true
-                        }
+                            selectedValue: $viewModel.selectedDirection,
+                            options: EventDirectionOption.allCases.map(\.rawValue),
+                            placeholder: "Выберите направление"
+                        )
 
                         EventLabeledMultilineField(
                             title: "Описание",
@@ -239,19 +235,6 @@ struct EventFormView: View {
                 ProgressView("Загрузка...")
                     .presentationDetents([.height(180)])
             }
-        }
-        .confirmationDialog(
-            "Направление",
-            isPresented: $isDirectionPickerPresented,
-            titleVisibility: .visible
-        ) {
-            ForEach(EventDirectionOption.allCases) { direction in
-                Button(direction.rawValue) {
-                    viewModel.selectedDirection = direction.rawValue
-                }
-            }
-
-            Button("Отмена", role: .cancel) { }
         }
         .sheet(item: $activePicker) { picker in
             EventDateTimePickerSheet(
@@ -488,6 +471,112 @@ private struct EventLabeledMultilineField: View {
                     .frame(height: 170)
             }
         }
+    }
+}
+
+private struct EventDirectionDropdownField: View {
+    let title: String
+    @Binding var selectedValue: String
+    let options: [String]
+    let placeholder: String
+
+    @State private var isExpanded = false
+
+    private var trimmedValue: String {
+        selectedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                EventFieldTitle(title: title)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(trimmedValue.isEmpty ? "Выбрать" : "Изменить")
+
+                        Image(systemName: "chevron.down")
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(Color(.systemGray5))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if isExpanded {
+                directionDropdown
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .zIndex(1)
+            }
+
+            if trimmedValue.isEmpty {
+                Text(placeholder)
+                    .font(.system(size: 15))
+                    .foregroundColor(.gray)
+                    .padding(.leading, 8)
+            } else {
+                ChipFlowLayout(spacing: 10) {
+                    SkillChip(title: trimmedValue)
+                }
+            }
+        }
+    }
+
+    private var directionDropdown: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(options, id: \.self) { option in
+                Button {
+                    selectedValue = option
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isExpanded = false
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(option)
+                            .font(.system(size: 15))
+                            .foregroundColor(.black)
+                            .multilineTextAlignment(.leading)
+
+                        Spacer(minLength: 12)
+
+                        if selectedValue == option {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 42)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if option != options.last {
+                    Divider()
+                        .padding(.leading, 14)
+                }
+            }
+        }
+        .frame(width: 260)
+        .background(Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.gray.opacity(0.25), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
     }
 }
 
