@@ -105,17 +105,26 @@ struct NotificationsListView: View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: 0) {
                 ForEach(viewModel.notifications) { item in
-                    NavigationLink {
-                        NotificationView(notification: item)
-                    } label: {
+                    if shouldShowApplicationActions(item) {
                         notificationRow(item)
-                    }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(TapGesture().onEnded {
-                        Task {
-                            await viewModel.markAsRead(item)
+                            .onTapGesture {
+                                Task {
+                                    await viewModel.markAsRead(item)
+                                }
+                            }
+                    } else {
+                        NavigationLink {
+                            NotificationView(notification: item)
+                        } label: {
+                            notificationRow(item)
                         }
-                    })
+                        .buttonStyle(.plain)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            Task {
+                                await viewModel.markAsRead(item)
+                            }
+                        })
+                    }
 
                     Divider()
                         .padding(.leading, 20)
@@ -144,6 +153,25 @@ struct NotificationsListView: View {
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                if shouldShowApplicationActions(item) {
+                    HStack(spacing: 10) {
+                        applicationActionButton("Принять", filled: true) {
+                            Task {
+                                await viewModel.markAsRead(item)
+                                await viewModel.acceptApplication(item)
+                            }
+                        }
+
+                        applicationActionButton("Отклонить", filled: false) {
+                            Task {
+                                await viewModel.markAsRead(item)
+                                await viewModel.rejectApplication(item)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+
                 Text(item.formattedDate)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundColor(item.isRead ? .gray.opacity(0.7) : .gray)
@@ -154,6 +182,34 @@ struct NotificationsListView: View {
         .padding(.horizontal, 20)
         .background(Color.white)
         .opacity(item.isRead ? 0.72 : 1)
+    }
+
+    private func shouldShowApplicationActions(_ item: AppNotificationItem) -> Bool {
+        item.applicationID != nil && item.applicationStatus == "pending"
+    }
+
+    private func applicationActionButton(
+        _ title: String,
+        filled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(filled ? .white : Color(red: 44/255, green: 67/255, blue: 102/255))
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(filled ? Color(red: 44/255, green: 67/255, blue: 102/255) : Color.white)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color(red: 44/255, green: 67/255, blue: 102/255), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isLoading)
     }
 
     private var clearButton: some View {
@@ -190,6 +246,11 @@ struct NotificationsListView: View {
         AppNotificationItem(
             id: 1,
             senderName: "Администратор",
+            eventID: nil,
+            applicationID: nil,
+            eventTitle: nil,
+            applicantName: nil,
+            applicationStatus: nil,
             message: "Ваше событие отправлено на модерацию.",
             createdAt: "2026-04-24T10:30:00Z",
             isRead: false
@@ -197,6 +258,11 @@ struct NotificationsListView: View {
         AppNotificationItem(
             id: 2,
             senderName: "EcoHand Foundation",
+            eventID: nil,
+            applicationID: nil,
+            eventTitle: nil,
+            applicantName: nil,
+            applicationStatus: nil,
             message: "Приглашаем вас присоединиться к новому волонтёрскому мероприятию в эту субботу.",
             createdAt: "2026-04-24T12:15:00Z",
             isRead: true

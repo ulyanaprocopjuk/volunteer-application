@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MyEventsView: View {
     @ObservedObject var viewModel: MyEventsViewModel
+    let session: AppSession
     let onCreateEvent: () -> Void
 
     @State private var selectedEvent: EventResponse?
@@ -57,7 +58,7 @@ struct MyEventsView: View {
             Text(viewModel.errorMessage ?? "")
         }
         .fullScreenCover(item: $selectedEvent) { event in
-            EventDetailsView(event: event)
+            EventDetailsView(event: event, session: session)
         }
     }
 

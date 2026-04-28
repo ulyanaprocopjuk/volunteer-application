@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, time, timedelta
 
 from fastapi import BackgroundTasks, HTTPException, status
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, false, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Direction, Event, Profile, User
+from app.models import Direction, Event, EventApplication, EventApplicationStatus, Profile, User
 from app.schemas import CreateEventRequest, CurrentCountryEventResponse, EventResponse
 from app.services.geocoding_service import COUNTRY_ALIASES
 from app.services.location_display import build_location_display
@@ -62,19 +62,19 @@ class EventService:
                 event.id,
             )
 
-        response = self._response(event)
+        response = self._response(db, event)
         response.message = "Событие отправлено для подтверждения, ожидайте."
         return response
 
     def get_event(self, db: Session, event_id: str) -> Event | None:
         return db.get(Event, event_id)
 
-    def get_event_response(self, db: Session, event_id: str) -> EventResponse | None:
+    def get_event_response(self, db: Session, event_id: str, user: User | None = None) -> EventResponse | None:
         self._mark_completed_events(db)
         event = self.get_event(db, event_id)
         if event is None:
             return None
-        return self._response(event)
+        return self._response(db, event, user)
 
     def list_my_events(
         self,
@@ -86,10 +86,19 @@ class EventService:
         self._mark_completed_events(db, now=now)
         comparison_time = self._database_comparison_time(db, now)
         event_end = func.coalesce(Event.ends_at, Event.starts_at)
+        profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
+        participant_clause = false()
+        if profile is not None:
+            participant_clause = Event.applications.any(
+                and_(
+                    EventApplication.volunteer_id == profile.id,
+                    EventApplication.status == EventApplicationStatus.accepted,
+                )
+            )
 
         query = (
             select(Event)
-            .where(Event.creator_id == user.id)
+            .where(or_(Event.creator_id == user.id, participant_clause))
             .order_by(Event.created_at.desc())
         )
 
@@ -107,7 +116,7 @@ class EventService:
 
         events = db.scalars(query).all()
 
-        return [self._response(event) for event in events]
+        return [self._response(db, event, user) for event in events]
 
     def list_events(
         self,
@@ -213,7 +222,97 @@ class EventService:
             query = query.where(Event.city.ilike(normalized_city))
 
         events = db.scalars(query).all()
-        return [self._response(event) for event in events]
+        return [self._response(db, event) for event in events]
+
+    def apply_to_event(self, db: Session, event_id: str, user: User) -> EventResponse:
+        if not user.is_active:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is blocked")
+
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        profile = self._profile_for_user(db, user)
+        accepted_count = self._accepted_count(db, event.id)
+        existing_application = self._application_for_profile(db, event.id, profile.id)
+
+        if event.creator_id == user.id:
+            if existing_application is None:
+                if accepted_count >= event.volunteers_needed:
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Свободных мест больше нет")
+                existing_application = EventApplication(
+                    event_id=event.id,
+                    volunteer_id=profile.id,
+                    status=EventApplicationStatus.accepted,
+                )
+                db.add(existing_application)
+            else:
+                if (
+                    existing_application.status != EventApplicationStatus.accepted
+                    and accepted_count >= event.volunteers_needed
+                ):
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Свободных мест больше нет")
+                existing_application.status = EventApplicationStatus.accepted
+
+            db.commit()
+            db.refresh(event)
+            response = self._response(db, event, user)
+            response.message = "Вы участвуете как волонтёр"
+            return response
+
+        if existing_application is not None:
+            response = self._response(db, event, user)
+            if existing_application.status == EventApplicationStatus.accepted:
+                response.message = "Вы уже участвуете"
+            elif existing_application.status == EventApplicationStatus.rejected:
+                response.message = "Ваша заявка была отклонена"
+            else:
+                response.message = "Заявка уже отправлена"
+            return response
+
+        if accepted_count >= event.volunteers_needed:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Свободных мест больше нет")
+
+        application = EventApplication(
+            event_id=event.id,
+            volunteer_id=profile.id,
+            status=EventApplicationStatus.pending,
+        )
+        db.add(application)
+        db.flush()
+
+        applicant_name = self._profile_display_name(profile)
+        event_title = event.title.strip() or "событие"
+        notification_service.create(
+            db,
+            event.creator_id,
+            f"{applicant_name} хочет участвовать в событии «{event_title}».",
+            sender_name=applicant_name,
+            event_id=event.id,
+            application_id=application.id,
+        )
+
+        db.commit()
+        db.refresh(event)
+        response = self._response(db, event, user)
+        response.message = "Заявка отправлена"
+        return response
+
+    def accept_application(self, db: Session, application_id: int, user: User) -> EventResponse:
+        return self._review_application(
+            db,
+            application_id=application_id,
+            user=user,
+            new_status=EventApplicationStatus.accepted,
+        )
+
+    def reject_application(self, db: Session, application_id: int, user: User) -> EventResponse:
+        return self._review_application(
+            db,
+            application_id=application_id,
+            user=user,
+            new_status=EventApplicationStatus.rejected,
+        )
 
     def list_events_for_current_user_country(
         self,
@@ -231,11 +330,110 @@ class EventService:
     def _build_address(event: Event) -> str:
         return build_location_display(event.location_name, event.city, event.country)
 
-    def _response(self, event: Event) -> EventResponse:
+    def _response(self, db: Session, event: Event, user: User | None = None) -> EventResponse:
         response = EventResponse.model_validate(event)
         response.direction = self._event_direction_name(event)
         response.organizer_name = self._organizer_name(event.creator)
+        response.accepted_count = self._accepted_count(db, event.id)
+        response.is_creator = user is not None and event.creator_id == user.id
+        response.user_application_status = self._user_application_status(db, event.id, user)
         return response
+
+    def _review_application(
+        self,
+        db: Session,
+        *,
+        application_id: int,
+        user: User,
+        new_status: EventApplicationStatus,
+    ) -> EventResponse:
+        application = db.get(EventApplication, application_id)
+        if application is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+        event = application.event
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can review application")
+
+        if new_status == EventApplicationStatus.accepted:
+            accepted_count = self._accepted_count(db, event.id)
+            if application.status != EventApplicationStatus.accepted and accepted_count >= event.volunteers_needed:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Свободных мест больше нет")
+
+        application.status = new_status
+        applicant_name = self._profile_display_name(application.volunteer)
+        event_title = event.title.strip() or "событие"
+
+        if new_status == EventApplicationStatus.accepted:
+            user_message = f"Ваша заявка на событие «{event_title}» принята."
+            response_message = "Заявка принята"
+        else:
+            user_message = f"Ваша заявка на событие «{event_title}» отклонена."
+            response_message = "Заявка отклонена"
+
+        notification_service.create(
+            db,
+            application.volunteer.user_id,
+            user_message,
+            event_id=event.id,
+            application_id=application.id,
+        )
+
+        db.commit()
+        db.refresh(event)
+        response = self._response(db, event, user)
+        response.message = f"{response_message}: {applicant_name}"
+        return response
+
+    @staticmethod
+    def _accepted_count(db: Session, event_id: str) -> int:
+        return db.scalar(
+            select(func.count())
+            .select_from(EventApplication)
+            .where(
+                EventApplication.event_id == event_id,
+                EventApplication.status == EventApplicationStatus.accepted,
+            )
+        ) or 0
+
+    @staticmethod
+    def _application_for_profile(db: Session, event_id: str, profile_id: int) -> EventApplication | None:
+        return db.scalar(
+            select(EventApplication).where(
+                EventApplication.event_id == event_id,
+                EventApplication.volunteer_id == profile_id,
+            )
+        )
+
+    def _user_application_status(self, db: Session, event_id: str, user: User | None) -> str | None:
+        if user is None or user.profile is None:
+            return None
+
+        application = self._application_for_profile(db, event_id, user.profile.id)
+        if application is None:
+            return None
+
+        return application.status.value
+
+    @staticmethod
+    def _profile_for_user(db: Session, user: User) -> Profile:
+        profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
+        if profile is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Profile is required")
+        return profile
+
+    @staticmethod
+    def _profile_display_name(profile: Profile) -> str:
+        organization_name = (profile.organization_name or "").strip()
+        if organization_name:
+            return organization_name
+
+        full_name = " ".join(
+            part.strip()
+            for part in [profile.first_name or "", profile.last_name or ""]
+            if part.strip()
+        )
+        return full_name or "Волонтёр"
 
     @staticmethod
     def _event_direction_name(event: Event) -> str | None:

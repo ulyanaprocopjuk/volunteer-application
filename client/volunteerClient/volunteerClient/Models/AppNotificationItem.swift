@@ -3,6 +3,11 @@ import Foundation
 struct AppNotificationItem: Identifiable, Decodable, Hashable {
     let id: Int
     let senderName: String
+    let eventID: String?
+    let applicationID: Int?
+    let eventTitle: String?
+    let applicantName: String?
+    let applicationStatus: String?
     let message: String
     let createdAt: String
     let isRead: Bool
@@ -10,6 +15,11 @@ struct AppNotificationItem: Identifiable, Decodable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id
         case senderName = "sender_name"
+        case eventID = "event_id"
+        case applicationID = "application_id"
+        case eventTitle = "event_title"
+        case applicantName = "applicant_name"
+        case applicationStatus = "application_status"
         case message
         case createdAt = "created_at"
         case isRead = "is_read"
@@ -39,6 +49,11 @@ struct AppNotificationItem: Identifiable, Decodable, Hashable {
         AppNotificationItem(
             id: id,
             senderName: senderName,
+            eventID: eventID,
+            applicationID: applicationID,
+            eventTitle: eventTitle,
+            applicantName: applicantName,
+            applicationStatus: applicationStatus,
             message: message,
             createdAt: createdAt,
             isRead: true

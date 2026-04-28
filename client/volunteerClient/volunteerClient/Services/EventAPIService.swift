@@ -4,6 +4,10 @@ protocol EventAPIProtocol {
     func uploadEventPhoto(data: Data, token: String?) async throws -> String
     func createEvent(_ request: CreateEventRequest, token: String?) async throws -> EventResponse
     func fetchMyEvents(filter: MyEventsFilter?, token: String?) async throws -> [EventResponse]
+    func fetchEvent(id: String, token: String?) async throws -> EventResponse
+    func applyToEvent(id: String, token: String) async throws -> EventResponse
+    func acceptApplication(id: Int, token: String) async throws -> EventResponse
+    func rejectApplication(id: Int, token: String) async throws -> EventResponse
     func fetchEventFeed(searchText: String?, token: String?) async throws -> [EventResponse]
     func fetchEventFeed(searchText: String?, filters: EventFeedFilters, token: String?) async throws -> [EventResponse]
 }
@@ -86,6 +90,31 @@ final class EventAPI: EventAPIProtocol {
         return try JSONDecoder().decode([EventResponse].self, from: data)
     }
 
+    func fetchEvent(id: String, token: String?) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(id)"))
+        urlRequest.httpMethod = "GET"
+
+        if let token, !token.isEmpty {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    func applyToEvent(id: String, token: String) async throws -> EventResponse {
+        try await postEventAction(path: "api/events/\(id)/applications", token: token)
+    }
+
+    func acceptApplication(id: Int, token: String) async throws -> EventResponse {
+        try await postEventAction(path: "api/events/applications/\(id)/accept", token: token)
+    }
+
+    func rejectApplication(id: Int, token: String) async throws -> EventResponse {
+        try await postEventAction(path: "api/events/applications/\(id)/reject", token: token)
+    }
+
     func fetchEventFeed(searchText: String?, token: String?) async throws -> [EventResponse] {
         try await fetchEventFeed(searchText: searchText, filters: .empty, token: token)
     }
@@ -155,6 +184,16 @@ final class EventAPI: EventAPIProtocol {
                 ?? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
             throw EventAPIError.server(message)
         }
+    }
+
+    private func postEventAction(path: String, token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent(path))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
     }
 
     private func makeMultipartBody(

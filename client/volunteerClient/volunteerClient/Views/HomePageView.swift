@@ -56,6 +56,12 @@ struct HomePageView: View {
                 await notificationModel.loadNotifications()
                 await myEventsModel.loadMyEvents()
             }
+            .onChange(of: selectedTab) { _, tab in
+                guard tab == .events else { return }
+                Task {
+                    await myEventsModel.loadMyEvents()
+                }
+            }
             .fullScreenCover(isPresented: $isEventFormPresented) {
                 NavigationStack {
                     EventFormView(
@@ -117,10 +123,10 @@ struct HomePageView: View {
             )
 
         case .explore:
-            SearchEventsView()
+            SearchEventsView(session: session)
 
         case .events:
-            MyEventsView(viewModel: myEventsModel) {
+            MyEventsView(viewModel: myEventsModel, session: session) {
                 isEventFormPresented = true
             }
         }

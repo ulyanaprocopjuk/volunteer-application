@@ -3,9 +3,28 @@ import SwiftUI
 struct EventDetailsView: View {
     @Environment(\.dismiss) private var dismiss
 
-    let event: EventResponse
+    private let session: AppSession?
+    private let api: EventAPIProtocol
+    @State private var currentEvent: EventResponse
+    @State private var isParticipationLoading = false
+    @State private var message: String?
+    @State private var errorMessage: String?
 
     private let eventImageSize: CGFloat = 56
+
+    init(
+        event: EventResponse,
+        session: AppSession? = nil,
+        api: EventAPIProtocol? = nil
+    ) {
+        self.session = session
+        self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        _currentEvent = State(initialValue: event)
+    }
+
+    private var event: EventResponse {
+        currentEvent
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,6 +40,31 @@ struct EventDetailsView: View {
             }
         }
         .background(Color.white.ignoresSafeArea())
+        .task {
+            await loadEventDetails()
+        }
+        .alert("Ошибка", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { _ in errorMessage = nil }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+        .overlay {
+            if let message {
+                Text(message)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.black.opacity(0.84))
+                    )
+                    .transition(.opacity)
+            }
+        }
     }
 
     private var headerView: some View {
@@ -79,6 +123,9 @@ struct EventDetailsView: View {
 
             bottomMetaBlock
                 .padding(.top, 28)
+
+            participationButton
+                .padding(.top, 22)
         }
     }
 
@@ -153,9 +200,7 @@ struct EventDetailsView: View {
     private var bottomMetaBlock: some View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(displayVolunteersText)
-                    .font(.system(size: 14, weight: .regular, design: .serif))
-                    .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
+                volunteersAvailabilityBlock
 
                 Text("Дата создания: \(displayCreatedDate)")
                     .font(.system(size: 14, weight: .regular, design: .serif))
@@ -177,6 +222,51 @@ struct EventDetailsView: View {
             }
             .frame(width: 90, alignment: .leading)
         }
+    }
+
+    private var volunteersAvailabilityBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 0) {
+                Text("\(remainingSlots)/\(event.volunteersNeeded)")
+                    .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
+
+                Text(" волонтёров нужно")
+                    .foregroundColor(.black.opacity(0.62))
+            }
+            .font(.system(size: 14, weight: .regular, design: .serif))
+
+            Rectangle()
+                .fill(Color(red: 58/255, green: 145/255, blue: 233/255).opacity(0.75))
+                .frame(height: 1)
+        }
+    }
+
+    private var participationButton: some View {
+        Button {
+            Task {
+                await applyToEvent()
+            }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isParticipationButtonDisabled
+                          ? Color.gray.opacity(0.28)
+                          : Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                if isParticipationLoading {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text(participationButtonTitle)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(isParticipationButtonDisabled ? .black.opacity(0.42) : .white)
+                }
+            }
+            .frame(width: 220, height: 48)
+        }
+        .buttonStyle(.plain)
+        .disabled(isParticipationButtonDisabled)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func infoRow(icon: String, text: String) -> some View {
@@ -239,8 +329,73 @@ struct EventDetailsView: View {
         EventDateDisplayFormatter.timeRangeText(start: startDate, end: endDate)
     }
 
-    private var displayVolunteersText: String {
-        "Требуется волонтёров: \(event.volunteersNeeded)"
+    private var remainingSlots: Int {
+        max(event.volunteersNeeded - (event.acceptedCount ?? 0), 0)
+    }
+
+    private var participationButtonTitle: String {
+        switch event.userApplicationStatus {
+        case "accepted":
+            return "Уже участвую"
+        case "pending":
+            return "Заявка отправлена"
+        case "rejected":
+            return "Заявка отклонена"
+        default:
+            if remainingSlots <= 0 {
+                return "Мест нет"
+            }
+            return event.isCreator == true ? "Участвовать как волонтёр" : "Участвовать"
+        }
+    }
+
+    private var isParticipationButtonDisabled: Bool {
+        isParticipationLoading
+            || session == nil
+            || event.userApplicationStatus == "accepted"
+            || event.userApplicationStatus == "pending"
+            || event.userApplicationStatus == "rejected"
+            || remainingSlots <= 0
+    }
+
+    private func loadEventDetails() async {
+        guard let session else { return }
+
+        do {
+            currentEvent = try await session.performAuthorizedRequest { token in
+                try await api.fetchEvent(id: currentEvent.id, token: token)
+            }
+        } catch {
+            return
+        }
+    }
+
+    private func applyToEvent() async {
+        guard let session else { return }
+
+        isParticipationLoading = true
+        errorMessage = nil
+        defer { isParticipationLoading = false }
+
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.applyToEvent(id: currentEvent.id, token: token)
+            }
+            currentEvent = updatedEvent
+            showMessage(updatedEvent.message ?? "Заявка отправлена")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func showMessage(_ value: String) {
+        message = value
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            if message == value {
+                message = nil
+            }
+        }
     }
 
     private var displayCreatedDate: String {
@@ -315,6 +470,7 @@ struct EventDetailsView: View {
             startsAt: "2026-04-24T10:00:00Z",
             endsAt: "2026-04-24T14:00:00Z",
             volunteersNeeded: 3,
+            acceptedCount: 1,
             status: "pending",
             message: nil,
             organizerName: "Анна Иванова",

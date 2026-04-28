@@ -77,12 +77,13 @@ struct MapEventsView: View {
             Text(viewModel.errorMessage ?? "")
         }
         .fullScreenCover(item: $detailsEvent) { event in
-            EventDetailsView(event: event)
+            EventDetailsView(event: event, session: viewModel.session)
         }
         .fullScreenCover(isPresented: $isFullMapPresented) {
             FullScreenEventsMapView(
                 events: viewModel.events,
-                fallbackCoordinate: viewModel.mapCenterCoordinate
+                fallbackCoordinate: viewModel.mapCenterCoordinate,
+                session: viewModel.session
             )
         }
     }
@@ -161,49 +162,73 @@ struct MapEventsView: View {
         VStack(alignment: .leading, spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 24) {
-                    Menu {
-                        Button("Любое направление") {
-                            Task { await viewModel.selectDirection(nil) }
+                    HStack(spacing: 10) {
+                        Menu {
+                            Button("Любое направление") {
+                                Task { await viewModel.selectDirection(nil) }
+                            }
+
+                            ForEach(EventDirectionOption.allCases) { direction in
+                                Button(direction.rawValue) {
+                                    Task { await viewModel.selectDirection(direction.rawValue) }
+                                }
+                            }
+                        } label: {
+                            filterChip(
+                                title: viewModel.directionFilterTitle,
+                                isActive: viewModel.selectedDirection != nil
+                            )
                         }
 
-                        ForEach(EventDirectionOption.allCases) { direction in
-                            Button(direction.rawValue) {
-                                Task { await viewModel.selectDirection(direction.rawValue) }
+                        if viewModel.selectedDirection != nil {
+                            resetFilterButton {
+                                Task { await viewModel.resetDirectionFilter() }
                             }
                         }
-                    } label: {
-                        filterChip(
-                            title: viewModel.directionFilterTitle,
-                            isActive: viewModel.selectedDirection != nil
-                        )
                     }
 
-                    Menu {
-                        ForEach(EventFeedTimeFilter.allCases) { filter in
-                            Button(filter.title) {
-                                Task { await viewModel.selectTimeFilter(filter) }
+                    HStack(spacing: 10) {
+                        Menu {
+                            ForEach(EventFeedTimeFilter.allCases) { filter in
+                                Button(filter.title) {
+                                    Task { await viewModel.selectTimeFilter(filter) }
+                                }
+                            }
+                        } label: {
+                            filterChip(
+                                title: viewModel.timeFilterTitle,
+                                isActive: viewModel.selectedTimeFilter != .any
+                            )
+                        }
+
+                        if viewModel.selectedTimeFilter != .any {
+                            resetFilterButton {
+                                Task { await viewModel.resetTimeFilter() }
                             }
                         }
-                    } label: {
-                        filterChip(
-                            title: viewModel.timeFilterTitle,
-                            isActive: viewModel.selectedTimeFilter != .any
-                        )
                     }
                 }
                 .padding(.horizontal, 20)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                Button {
-                    isLocationFilterPresented = true
-                } label: {
-                    filterChip(
-                        title: viewModel.locationFilterTitle,
-                        isActive: viewModel.isLocationFilterActive
-                    )
+                HStack(spacing: 10) {
+                    Button {
+                        isLocationFilterPresented = true
+                    } label: {
+                        filterChip(
+                            title: viewModel.locationFilterTitle,
+                            isActive: viewModel.isLocationFilterActive
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    if viewModel.isLocationFilterActive {
+                        resetFilterButton {
+                            Task { await viewModel.resetLocationFilter() }
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, 20)
             }
         }
@@ -236,40 +261,44 @@ struct MapEventsView: View {
         .shadow(color: .black.opacity(isActive ? 0.09 : 0.04), radius: 7, y: 3)
     }
 
+    private func resetFilterButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                .frame(width: 34, height: 34)
+                .background(Color.white)
+                .overlay(
+                    Circle()
+                        .stroke(Color(red: 68/255, green: 185/255, blue: 255/255).opacity(0.65), lineWidth: 1)
+                )
+                .clipShape(Circle())
+                .shadow(color: .black.opacity(0.04), radius: 7, y: 3)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var statisticsView: some View {
         Group {
             if viewModel.events.isEmpty && !viewModel.isLoading {
                 emptyStateView
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(viewModel.events.isEmpty ? "Событий не найдено" : "Найдено событий \(viewModel.events.count)")
+                    Text(viewModel.events.isEmpty ? "Событий не найдено" : "Найдено событий: \(viewModel.events.count)")
                         .font(.system(size: 18, weight: .semibold, design: .serif))
                         .foregroundColor(.black.opacity(0.78))
 
-                    ForEach(viewModel.events.prefix(3)) { event in
-                        HStack(alignment: .top, spacing: 10) {
-                            Circle()
-                                .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
-                                .frame(width: 6, height: 6)
-                                .padding(.top, 7)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(event.title)
-                                    .font(.system(size: 15, weight: .semibold, design: .serif))
-                                    .foregroundColor(.black.opacity(0.75))
-                                    .lineLimit(2)
-
-                                Text(event.shortMapSummary)
-                                    .font(.system(size: 13, weight: .regular, design: .serif))
-                                    .foregroundColor(.black.opacity(0.55))
-                                    .lineLimit(2)
+                    VStack(spacing: 12) {
+                        ForEach(viewModel.events) { event in
+                            Button {
+                                detailsEvent = event
+                            } label: {
+                                EventFeedSummaryCard(event: event)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
-                .padding(16)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
     }
@@ -377,6 +406,7 @@ private struct FullScreenEventsMapView: View {
 
     let events: [EventResponse]
     let fallbackCoordinate: CLLocationCoordinate2D
+    let session: AppSession?
 
     @State private var selectedEvent: EventResponse?
     @State private var detailsEvent: EventResponse?
@@ -442,7 +472,7 @@ private struct FullScreenEventsMapView: View {
         }
         .background(Color.white.ignoresSafeArea())
         .fullScreenCover(item: $detailsEvent) { event in
-            EventDetailsView(event: event)
+            EventDetailsView(event: event, session: session)
         }
     }
 }
@@ -459,12 +489,14 @@ private final class MapEventsViewModel: ObservableObject {
     @Published private(set) var isLocationFilterActive = false
     @Published private(set) var mapCenterCoordinate: CLLocationCoordinate2D
 
-    private let session: AppSession?
+    let session: AppSession?
     private let api: EventAPIProtocol
     private let profileAPI: ProfileAPIProtocol
     private let geocodingAPI: GeocodingAPIProtocol
     private var hasLoadedContext = false
     private var activeRequestID = UUID()
+    private var profileCountry: String
+    private var profileCity: String
 
     init(
         session: AppSession? = nil,
@@ -480,6 +512,8 @@ private final class MapEventsViewModel: ObservableObject {
         self.geocodingAPI = geocodingAPI ?? GeocodingAPI(baseURL: URL(string: AppConfig.baseURLString)!)
         self.selectedCountry = defaultCountry
         self.selectedCity = defaultCity
+        self.profileCountry = defaultCountry
+        self.profileCity = defaultCity
         self.mapCenterCoordinate = CityDirectory.searchArea(for: defaultCountry).center
     }
 
@@ -530,6 +564,16 @@ private final class MapEventsViewModel: ObservableObject {
         await applyFilters()
     }
 
+    func resetDirectionFilter() async {
+        selectedDirection = nil
+        await applyFilters()
+    }
+
+    func resetTimeFilter() async {
+        selectedTimeFilter = .any
+        await applyFilters()
+    }
+
     func updateCountry(_ country: String) {
         isLocationFilterActive = true
         selectedCountry = CityDirectory.canonicalCountryName(for: country)
@@ -542,6 +586,13 @@ private final class MapEventsViewModel: ObservableObject {
     func updateCity(_ city: String) {
         isLocationFilterActive = true
         selectedCity = city
+    }
+
+    func resetLocationFilter() async {
+        isLocationFilterActive = false
+        selectedCountry = profileCountry
+        selectedCity = profileCity
+        await applyFilters()
     }
 
     func applyFilters() async {
@@ -600,6 +651,8 @@ private final class MapEventsViewModel: ObservableObject {
             } else {
                 selectedCity = CityDirectory.cities(for: selectedCountry).first ?? ""
             }
+            profileCountry = selectedCountry
+            profileCity = selectedCity
         } catch {
             return
         }
@@ -625,6 +678,153 @@ private final class MapEventsViewModel: ObservableObject {
             mapCenterCoordinate = searchArea.center
         }
     }
+}
+
+private struct EventFeedSummaryCard: View {
+    let event: EventResponse
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            thumbnail
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(displayTitle)
+                    .font(.system(size: 17, weight: .bold, design: .serif))
+                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !directionText.isEmpty {
+                    Text(directionText)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
+                        .lineLimit(1)
+                }
+
+                Label(dateText, systemImage: "calendar")
+                    .font(.system(size: 13, weight: .medium, design: .serif))
+                    .foregroundColor(.black.opacity(0.58))
+                    .lineLimit(1)
+
+                Label(locationText, systemImage: "mappin.and.ellipse")
+                    .font(.system(size: 13, weight: .medium, design: .serif))
+                    .foregroundColor(.black.opacity(0.58))
+                    .lineLimit(2)
+
+                if !organizerText.isEmpty {
+                    Text(organizerText)
+                        .font(.system(size: 12, weight: .semibold, design: .serif))
+                        .foregroundColor(.black.opacity(0.48))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.black.opacity(0.32))
+                .padding(.top, 4)
+        }
+        .padding(14)
+        .background(Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(red: 68/255, green: 185/255, blue: 255/255).opacity(0.8), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+    }
+
+    private var thumbnail: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(red: 244/255, green: 248/255, blue: 252/255))
+
+            if let photoURL {
+                AsyncImage(url: photoURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .empty:
+                        ProgressView()
+                    case .failure:
+                        placeholder
+                    @unknown default:
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: 74, height: 74)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "figure.wave")
+            .font(.system(size: 24, weight: .semibold))
+            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+    }
+
+    private var displayTitle: String {
+        let value = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? "Без названия" : value
+    }
+
+    private var directionText: String {
+        event.direction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var locationText: String {
+        let location = event.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return location.isEmpty ? "\(event.country), \(event.city)" : location
+    }
+
+    private var organizerText: String {
+        let value = event.organizerName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? "" : "Организатор: \(value)"
+    }
+
+    private var dateText: String {
+        EventDateDisplayFormatter.dateRangeText(start: startDate, end: endDate)
+    }
+
+    private var startDate: Date {
+        Self.isoFormatter.date(from: event.startsAt) ?? Date()
+    }
+
+    private var endDate: Date? {
+        guard let endsAt = event.endsAt else { return nil }
+        return Self.isoFormatter.date(from: endsAt)
+    }
+
+    private var photoURL: URL? {
+        guard let photoURL = event.photoURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !photoURL.isEmpty else {
+            return nil
+        }
+
+        if let url = URL(string: photoURL), url.scheme != nil {
+            return url
+        }
+
+        guard let baseURL = URL(string: AppConfig.baseURLString) else {
+            return nil
+        }
+
+        let path = photoURL.hasPrefix("/") ? String(photoURL.dropFirst()) : photoURL
+        return baseURL.appendingPathComponent(path)
+    }
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 }
 
 private struct EventMapPreviewCard: View {

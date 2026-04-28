@@ -74,6 +74,11 @@ struct NotificationView: View {
         notification: AppNotificationItem(
             id: 1,
             senderName: "Администратор",
+            eventID: nil,
+            applicationID: nil,
+            eventTitle: nil,
+            applicantName: nil,
+            applicationStatus: nil,
             message: "Ваше событие отправлено на модерацию.",
             createdAt: "2026-04-24T10:30:00Z",
             isRead: false

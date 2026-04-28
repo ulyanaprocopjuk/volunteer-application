@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 if TYPE_CHECKING:
+    from .event_application import EventApplication
     from .skill import Skill
     from .user import User
 
@@ -64,6 +65,11 @@ class Profile(Base):
         "Skill",
         secondary=volunteer_skills,
         backref="volunteers",
+    )
+    event_applications: Mapped[list[EventApplication]] = relationship(
+        "EventApplication",
+        back_populates="volunteer",
+        cascade="all, delete-orphan",
     )
 
     @property

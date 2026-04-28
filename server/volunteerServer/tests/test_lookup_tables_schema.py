@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db import Base
 from app.db_schema import DIRECTION_NAMES, SKILL_NAMES, ensure_database_schema
-from app.models import Direction, Skill
+from app.models import Direction, EventApplicationStatus, Skill
 
 
 class LookupTablesSchemaTests(unittest.TestCase):
@@ -22,6 +22,7 @@ class LookupTablesSchemaTests(unittest.TestCase):
         self.assertIn("skills", table_names)
         self.assertIn("volunteer_skills", table_names)
         self.assertIn("events_direction", table_names)
+        self.assertIn("event_applications", table_names)
         self.assertNotIn(
             "skills",
             {column["name"] for column in inspector.get_columns("profiles")},
@@ -35,6 +36,28 @@ class LookupTablesSchemaTests(unittest.TestCase):
             {column["name"] for column in inspector.get_columns("events_direction")},
             {"event_id", "direction_id"},
         )
+        self.assertEqual(
+            {column["name"] for column in inspector.get_columns("event_applications")},
+            {"id", "event_id", "volunteer_id", "status", "created_at", "updated_at"},
+        )
+        self.assertTrue(
+            any(
+                set(constraint["column_names"]) == {"event_id", "volunteer_id"}
+                for constraint in inspector.get_unique_constraints("event_applications")
+            )
+        )
+        self.assertEqual(
+            {status.value for status in EventApplicationStatus},
+            {"pending", "accepted", "rejected", "cancelled"},
+        )
+        self.assertIn(
+            "event_id",
+            {column["name"] for column in inspector.get_columns("notifications")},
+        )
+        self.assertIn(
+            "application_id",
+            {column["name"] for column in inspector.get_columns("notifications")},
+        )
 
         with Session(engine) as session:
             directions = session.scalars(select(Direction.name).order_by(Direction.id)).all()
@@ -42,6 +65,35 @@ class LookupTablesSchemaTests(unittest.TestCase):
 
         self.assertEqual(directions, DIRECTION_NAMES)
         self.assertEqual(skills, SKILL_NAMES)
+
+    def test_adds_notification_reference_columns_to_existing_table(self):
+        engine = create_engine("sqlite:///:memory:")
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE TABLE notifications ("
+                    "id INTEGER PRIMARY KEY, "
+                    "user_id INTEGER NOT NULL, "
+                    "sender_name VARCHAR(100) NOT NULL, "
+                    "message TEXT NOT NULL, "
+                    "is_read BOOLEAN NOT NULL, "
+                    "created_at DATETIME NOT NULL"
+                    ")"
+                )
+            )
+
+        ensure_database_schema(engine)
+
+        inspector = inspect(engine)
+        self.assertIn(
+            "event_id",
+            {column["name"] for column in inspector.get_columns("notifications")},
+        )
+        self.assertIn(
+            "application_id",
+            {column["name"] for column in inspector.get_columns("notifications")},
+        )
 
     def test_removes_legacy_profile_skills_column_after_backfill(self):
         engine = create_engine("sqlite:///:memory:")

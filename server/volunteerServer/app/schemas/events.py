@@ -56,6 +56,9 @@ class EventResponse(BaseModel):
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     volunteers_needed: int = Field(alias="volunteersNeeded")
+    accepted_count: int = Field(default=0, alias="accepted_count")
+    user_application_status: str | None = Field(default=None, alias="user_application_status")
+    is_creator: bool = Field(default=False, alias="is_creator")
     status: str | None = None
     message: str | None = None
     organizer_name: str | None = Field(default=None, alias="organizerName")

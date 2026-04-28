@@ -17,11 +17,15 @@ class NotificationService:
         user_id: int,
         message: str,
         sender_name: str = DEFAULT_NOTIFICATION_SENDER_NAME,
+        event_id: str | None = None,
+        application_id: int | None = None,
     ) -> Notification:
         notification = Notification(
             user_id=user_id,
             message=message,
             sender_name=normalize_notification_sender_name(sender_name),
+            event_id=event_id,
+            application_id=application_id,
         )
         db.add(notification)
         return notification

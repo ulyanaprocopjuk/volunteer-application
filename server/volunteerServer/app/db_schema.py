@@ -50,6 +50,7 @@ def ensure_database_schema(engine: Engine) -> None:
     _remove_legacy_profile_skills_column(engine, inspector, table_names)
 
     if "notifications" in table_names:
+        _ensure_notification_reference_columns(engine, inspector)
         with engine.begin() as connection:
             connection.execute(
                 text(
@@ -120,6 +121,23 @@ def _seed_lookup_table(
             text(f"INSERT INTO {table_name} (name) VALUES (:name)"),
             [{"name": name} for name in missing_names],
         )
+
+
+def _ensure_notification_reference_columns(engine: Engine, inspector) -> None:
+    columns = {column["name"] for column in inspector.get_columns("notifications")}
+    statements: list[str] = []
+
+    if "event_id" not in columns:
+        statements.append("ALTER TABLE notifications ADD COLUMN event_id VARCHAR(36) NULL")
+    if "application_id" not in columns:
+        statements.append("ALTER TABLE notifications ADD COLUMN application_id INTEGER NULL")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
 
 
 def _remove_legacy_profile_skills_column(

@@ -30,10 +30,57 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     let startsAt: String
     let endsAt: String?
     let volunteersNeeded: Int
+    let acceptedCount: Int?
+    let userApplicationStatus: String?
+    let isCreator: Bool?
     let status: String?
     let message: String?
     let organizerName: String?
     let createdAt: String?
+
+    init(
+        id: String,
+        title: String,
+        direction: String?,
+        description: String,
+        country: String,
+        city: String,
+        locationName: String,
+        photoURL: String?,
+        latitude: Double,
+        longitude: Double,
+        startsAt: String,
+        endsAt: String?,
+        volunteersNeeded: Int,
+        acceptedCount: Int? = nil,
+        userApplicationStatus: String? = nil,
+        isCreator: Bool? = nil,
+        status: String?,
+        message: String?,
+        organizerName: String?,
+        createdAt: String?
+    ) {
+        self.id = id
+        self.title = title
+        self.direction = direction
+        self.description = description
+        self.country = country
+        self.city = city
+        self.locationName = locationName
+        self.photoURL = photoURL
+        self.latitude = latitude
+        self.longitude = longitude
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        self.volunteersNeeded = volunteersNeeded
+        self.acceptedCount = acceptedCount
+        self.userApplicationStatus = userApplicationStatus
+        self.isCreator = isCreator
+        self.status = status
+        self.message = message
+        self.organizerName = organizerName
+        self.createdAt = createdAt
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -49,6 +96,9 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         case startsAt
         case endsAt
         case volunteersNeeded
+        case acceptedCount = "accepted_count"
+        case userApplicationStatus = "user_application_status"
+        case isCreator = "is_creator"
         case status
         case message
         case organizerName

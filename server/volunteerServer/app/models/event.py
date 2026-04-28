@@ -11,6 +11,7 @@ from app.db import Base
 
 if TYPE_CHECKING:
     from .direction import Direction
+    from .event_application import EventApplication
     from .user import User
 
 from .associations import events_direction
@@ -56,4 +57,9 @@ class Event(Base):
         "Direction",
         secondary=events_direction,
         backref="events",
+    )
+    applications: Mapped[list[EventApplication]] = relationship(
+        "EventApplication",
+        back_populates="event",
+        cascade="all, delete-orphan",
     )
