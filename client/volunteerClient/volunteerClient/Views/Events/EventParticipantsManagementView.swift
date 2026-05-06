@@ -193,32 +193,41 @@ struct EventParticipantsManagementView: View {
                 HStack(spacing: 12) {
                     ParticipantAvatarView(avatarURL: participant.profile.avatarURL)
 
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(participant.profile.displayName)
-                            .font(.system(size: 16, weight: .semibold, design: .serif))
-                            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                            .lineLimit(2)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(participant.profile.displayName)
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .buttonStyle(.plain)
 
-            Button {
-                participantForRemoval = participant
-                removalReason = ""
-                showsRemovalPrompt = true
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10))
-                    )
+            if !participant.isCreator {
+                switch participant.applicationStatus {
+                case .pending:
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(Color(red: 0.82, green: 0.62, blue: 0.07))
+                case .accepted:
+                    Button {
+                        participantForRemoval = participant
+                        removalReason = ""
+                        showsRemovalPrompt = true
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                default:
+                    EmptyView()
+                }
             }
-            .buttonStyle(.plain)
         }
         .padding(14)
         .background(Color(.systemGray6).opacity(0.65))
@@ -358,7 +367,9 @@ final class EventParticipantsManagementViewModel: ObservableObject {
     }
 
     var participants: [EventParticipantResponse] {
-        applications.filter { $0.applicationStatus == .accepted }
+        applications.filter {
+            $0.applicationStatus == .accepted || $0.applicationStatus == .pending
+        }
     }
 
     var applicationRequests: [EventParticipantResponse] {
@@ -452,37 +463,31 @@ private struct ParticipantProfileDetailsView: View {
     @Environment(\.dismiss) private var dismiss
     let profile: ProfileResponse
 
+    private var isOrganization: Bool { profile.type == "organization" }
+
     var body: some View {
         VStack(spacing: 0) {
             headerView
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    topBlock
+                VStack(spacing: 0) {
+                    avatarSection
+                        .padding(.top, 24)
 
-                    VStack(spacing: 12) {
-                        profileRow(title: "Тип", value: profile.displayType)
-                        profileRow(title: "Телефон", value: profile.phone ?? "Не указано")
-                        profileRow(title: "Электронная почта", value: profile.email ?? "Не указано")
-                        profileRow(title: "Местоположение", value: profile.locationText)
-
-                        if !profile.skillsText.isEmpty {
-                            profileRow(title: "Навыки", value: profile.skillsText)
-                        }
-
-                        if let about = profile.about?.trimmingCharacters(in: .whitespacesAndNewlines),
-                           !about.isEmpty {
-                            profileRow(title: "О себе", value: about)
+                    VStack(alignment: .leading, spacing: 22) {
+                        if isOrganization {
+                            organizationFields
+                        } else {
+                            volunteerFields
                         }
                     }
-                    .padding(.top, 26)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 28)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 25)
-                .padding(.bottom, 40)
+                .padding(.bottom, 24)
             }
         }
-        .background(Color.white.ignoresSafeArea())
+        .background(Color(.systemGray6).ignoresSafeArea())
     }
 
     private var headerView: some View {
@@ -520,36 +525,78 @@ private struct ParticipantProfileDetailsView: View {
         }
     }
 
-    private var topBlock: some View {
-        HStack(alignment: .center, spacing: 14) {
-            ParticipantAvatarView(avatarURL: profile.avatarURL, size: 64)
+    private var avatarSection: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 231/255, green: 243/255, blue: 247/255))
+                .frame(width: 104, height: 104)
 
-            Text(profile.displayName)
-                .font(.system(size: 19, weight: .bold, design: .serif))
-                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            avatarContent
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 104, height: 104)
+        .clipShape(Circle())
     }
 
-    private func profileRow(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.system(size: 13, weight: .regular, design: .serif))
-                .foregroundColor(.black.opacity(0.45))
-
-            Text(value)
-                .font(.system(size: 15, weight: .regular, design: .serif))
-                .foregroundColor(.black.opacity(0.68))
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private var avatarContent: some View {
+        if let remoteURL {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .tint(Color(red: 18/255, green: 162/255, blue: 231/255))
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 104, height: 104)
+                case .failure:
+                    avatarPlaceholder
+                @unknown default:
+                    avatarPlaceholder
+                }
+            }
+        } else {
+            avatarPlaceholder
         }
-        .padding(.vertical, 11)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color(red: 58/255, green: 145/255, blue: 233/255).opacity(0.22))
-                .frame(height: 1)
+    }
+
+    private var avatarPlaceholder: some View {
+        Image(systemName: isOrganization ? "building.2.fill" : "person.fill")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 40, height: 40)
+            .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+    }
+
+    private var remoteURL: URL? {
+        guard let avatarURL = profile.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !avatarURL.isEmpty else { return nil }
+        if let url = URL(string: avatarURL), url.scheme != nil { return url }
+        guard let baseURL = URL(string: AppConfig.baseURLString) else { return nil }
+        let path = avatarURL.hasPrefix("/") ? String(avatarURL.dropFirst()) : avatarURL
+        return baseURL.appendingPathComponent(path)
+    }
+
+    private var volunteerFields: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            ReadOnlyField(title: "Имя", value: profile.firstName ?? "")
+            ReadOnlyField(title: "Фамилия", value: profile.lastName ?? "")
+            ReadOnlyField(title: "Номер телефона", value: profile.phone ?? "")
+            ReadOnlyField(title: "Электронная почта", value: profile.email ?? "")
+            ReadOnlyField(title: "Местонахождение", value: profile.locationText)
+            ReadOnlySkillsField(title: "Навыки", values: profile.skills ?? [])
+            ReadOnlyMultilineField(title: "Обо мне", value: profile.about ?? "")
+        }
+    }
+
+    private var organizationFields: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            ReadOnlyField(title: "Название организации", value: profile.organizationName ?? "")
+            ReadOnlyField(title: "Телефон", value: profile.phone ?? "")
+            ReadOnlyField(title: "Электронная почта", value: profile.email ?? "")
+            ReadOnlyField(title: "Местонахождение", value: profile.locationText)
+            ReadOnlyMultilineField(title: "О нас", value: profile.about ?? "")
         }
     }
 }

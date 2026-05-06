@@ -3,6 +3,16 @@ import SwiftUI
 struct NotificationView: View {
     @Environment(\.dismiss) private var dismiss
     let notification: AppNotificationItem
+    var session: AppSession? = nil
+
+    @State private var showsApplications = false
+
+    private var canOpenApplications: Bool {
+        session != nil
+            && notification.eventID != nil
+            && notification.applicationID != nil
+            && notification.applicationStatus == "pending"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,6 +30,23 @@ struct NotificationView: View {
                         .foregroundColor(.black.opacity(0.7))
                         .frame(maxWidth: .infinity, alignment: .leading)
 
+                    if canOpenApplications {
+                        Button {
+                            showsApplications = true
+                        } label: {
+                            Text("Перейти в заявки события")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     Text(notification.formattedDate)
                         .font(.system(size: 14, weight: .regular))
                         .foregroundColor(.gray)
@@ -33,6 +60,15 @@ struct NotificationView: View {
         .background(Color(.systemGray6).ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .fullScreenCover(isPresented: $showsApplications) {
+            if let session, let eventID = notification.eventID {
+                EventParticipantsManagementView(
+                    eventID: eventID,
+                    session: session,
+                    initialSegment: .applications
+                )
+            }
+        }
     }
 
     private var headerView: some View {

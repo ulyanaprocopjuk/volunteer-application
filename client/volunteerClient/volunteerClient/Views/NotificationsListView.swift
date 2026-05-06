@@ -3,7 +3,6 @@ import SwiftUI
 struct NotificationsListView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: NotificationViewModel
-    @State private var applicationsRoute: EventApplicationsRoute?
     private let shouldLoadOnAppear: Bool
     private let session: AppSession?
 
@@ -54,15 +53,6 @@ struct NotificationsListView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(viewModel.errorMessage ?? "")
-            }
-            .fullScreenCover(item: $applicationsRoute) { route in
-                if let session {
-                    EventParticipantsManagementView(
-                        eventID: route.eventID,
-                        session: session,
-                        initialSegment: .applications
-                    )
-                }
             }
         }
     }
@@ -118,27 +108,17 @@ struct NotificationsListView: View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: 0) {
                 ForEach(viewModel.notifications) { item in
-                    if canOpenApplications(item), let eventID = item.eventID {
+                    NavigationLink {
+                        NotificationView(notification: item, session: session)
+                    } label: {
                         notificationRow(item)
-                            .onTapGesture {
-                                Task {
-                                    await viewModel.markAsRead(item)
-                                    applicationsRoute = EventApplicationsRoute(eventID: eventID)
-                                }
-                            }
-                    } else {
-                        NavigationLink {
-                            NotificationView(notification: item)
-                        } label: {
-                            notificationRow(item)
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            Task {
-                                await viewModel.markAsRead(item)
-                            }
-                        })
                     }
+                    .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        Task {
+                            await viewModel.markAsRead(item)
+                        }
+                    })
 
                     Divider()
                         .padding(.leading, 20)
@@ -167,13 +147,6 @@ struct NotificationsListView: View {
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if canOpenApplications(item) {
-                    Text("Открыть заявки")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                    .padding(.top, 2)
-                }
-
                 Text(item.formattedDate)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundColor(item.isRead ? .gray.opacity(0.7) : .gray)
@@ -184,13 +157,6 @@ struct NotificationsListView: View {
         .padding(.horizontal, 20)
         .background(Color.white)
         .opacity(item.isRead ? 0.72 : 1)
-    }
-
-    private func canOpenApplications(_ item: AppNotificationItem) -> Bool {
-        session != nil
-            && item.eventID != nil
-            && item.applicationID != nil
-            && item.applicationStatus == "pending"
     }
 
     private var clearButton: some View {
@@ -218,14 +184,6 @@ struct NotificationsListView: View {
         .buttonStyle(.plain)
         .disabled(viewModel.notifications.isEmpty || viewModel.isLoading)
         .opacity((viewModel.notifications.isEmpty || viewModel.isLoading) ? 0.6 : 1)
-    }
-}
-
-private struct EventApplicationsRoute: Identifiable {
-    let eventID: String
-
-    var id: String {
-        eventID
     }
 }
 
