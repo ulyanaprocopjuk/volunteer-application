@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .profile import ProfileResponse
+
 
 class CreateEventRequest(BaseModel):
     title: str = Field(min_length=1, max_length=255)
@@ -76,6 +78,29 @@ class EventResponse(BaseModel):
             "rejected": "Отклонено",
             "completed": "Завершено",
         }.get(value.lower(), value)
+
+
+class EventParticipantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    application_id: int = Field(alias="application_id")
+    event_id: str = Field(alias="event_id")
+    event_title: str = Field(alias="event_title")
+    status: str
+    is_creator: bool = Field(default=False, alias="is_creator")
+    profile: ProfileResponse
+
+
+class RemoveEventParticipantRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("reason is required")
+        return value
 
 
 class CurrentCountryEventResponse(BaseModel):

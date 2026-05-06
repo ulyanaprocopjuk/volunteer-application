@@ -3,16 +3,20 @@ import SwiftUI
 struct NotificationsListView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: NotificationViewModel
+    @State private var applicationsRoute: EventApplicationsRoute?
     private let shouldLoadOnAppear: Bool
+    private let session: AppSession?
 
     init(session: AppSession) {
         _viewModel = StateObject(wrappedValue: NotificationViewModel(session: session))
         self.shouldLoadOnAppear = true
+        self.session = session
     }
 
     init(viewModel: NotificationViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
         self.shouldLoadOnAppear = false
+        self.session = nil
     }
 
     var body: some View {
@@ -50,6 +54,15 @@ struct NotificationsListView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(viewModel.errorMessage ?? "")
+            }
+            .fullScreenCover(item: $applicationsRoute) { route in
+                if let session {
+                    EventParticipantsManagementView(
+                        eventID: route.eventID,
+                        session: session,
+                        initialSegment: .applications
+                    )
+                }
             }
         }
     }
@@ -105,11 +118,12 @@ struct NotificationsListView: View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: 0) {
                 ForEach(viewModel.notifications) { item in
-                    if shouldShowApplicationActions(item) {
+                    if canOpenApplications(item), let eventID = item.eventID {
                         notificationRow(item)
                             .onTapGesture {
                                 Task {
                                     await viewModel.markAsRead(item)
+                                    applicationsRoute = EventApplicationsRoute(eventID: eventID)
                                 }
                             }
                     } else {
@@ -153,22 +167,10 @@ struct NotificationsListView: View {
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if shouldShowApplicationActions(item) {
-                    HStack(spacing: 10) {
-                        applicationActionButton("Принять", filled: true) {
-                            Task {
-                                await viewModel.markAsRead(item)
-                                await viewModel.acceptApplication(item)
-                            }
-                        }
-
-                        applicationActionButton("Отклонить", filled: false) {
-                            Task {
-                                await viewModel.markAsRead(item)
-                                await viewModel.rejectApplication(item)
-                            }
-                        }
-                    }
+                if canOpenApplications(item) {
+                    Text("Открыть заявки")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                     .padding(.top, 2)
                 }
 
@@ -184,32 +186,11 @@ struct NotificationsListView: View {
         .opacity(item.isRead ? 0.72 : 1)
     }
 
-    private func shouldShowApplicationActions(_ item: AppNotificationItem) -> Bool {
-        item.applicationID != nil && item.applicationStatus == "pending"
-    }
-
-    private func applicationActionButton(
-        _ title: String,
-        filled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(filled ? .white : Color(red: 44/255, green: 67/255, blue: 102/255))
-                .padding(.horizontal, 14)
-                .frame(height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(filled ? Color(red: 44/255, green: 67/255, blue: 102/255) : Color.white)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color(red: 44/255, green: 67/255, blue: 102/255), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isLoading)
+    private func canOpenApplications(_ item: AppNotificationItem) -> Bool {
+        session != nil
+            && item.eventID != nil
+            && item.applicationID != nil
+            && item.applicationStatus == "pending"
     }
 
     private var clearButton: some View {
@@ -237,6 +218,14 @@ struct NotificationsListView: View {
         .buttonStyle(.plain)
         .disabled(viewModel.notifications.isEmpty || viewModel.isLoading)
         .opacity((viewModel.notifications.isEmpty || viewModel.isLoading) ? 0.6 : 1)
+    }
+}
+
+private struct EventApplicationsRoute: Identifiable {
+    let eventID: String
+
+    var id: String {
+        eventID
     }
 }
 

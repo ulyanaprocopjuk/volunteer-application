@@ -9,6 +9,7 @@ struct EventDetailsView: View {
     @State private var isParticipationLoading = false
     @State private var message: String?
     @State private var errorMessage: String?
+    @State private var showsParticipantsManagement = false
 
     private let eventImageSize: CGFloat = 56
 
@@ -65,6 +66,11 @@ struct EventDetailsView: View {
                     .transition(.opacity)
             }
         }
+        .fullScreenCover(isPresented: $showsParticipantsManagement) {
+            if let session {
+                EventParticipantsManagementView(eventID: event.id, session: session)
+            }
+        }
     }
 
     private var headerView: some View {
@@ -92,6 +98,23 @@ struct EventDetailsView: View {
                 }
 
                 Spacer()
+
+                if event.isCreator == true, session != nil {
+                    Button {
+                        showsParticipantsManagement = true
+                    } label: {
+                        Image(systemName: "list.bullet.rectangle")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.black.opacity(0.75))
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle()
+                                    .stroke(Color.black.opacity(0.35), lineWidth: 1)
+                                    .background(Circle().fill(Color.clear))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, 20)
         }
@@ -124,8 +147,10 @@ struct EventDetailsView: View {
             bottomMetaBlock
                 .padding(.top, 28)
 
-            participationButton
-                .padding(.top, 22)
+            if shouldShowParticipationButton {
+                participationButton
+                    .padding(.top, 22)
+            }
         }
     }
 
@@ -227,11 +252,22 @@ struct EventDetailsView: View {
     private var volunteersAvailabilityBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 0) {
-                Text("\(remainingSlots)/\(event.volunteersNeeded)")
-                    .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
+                if remainingSlots == 0 {
+                    Text("Волонтёры: ")
+                        .foregroundColor(.black.opacity(0.62))
 
-                Text(" волонтёров нужно")
-                    .foregroundColor(.black.opacity(0.62))
+                    Text("\(acceptedParticipants)/\(event.volunteersNeeded)")
+                        .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
+
+                    Text(" набрано")
+                        .foregroundColor(.black.opacity(0.62))
+                } else {
+                    Text("\(remainingSlots)/\(event.volunteersNeeded)")
+                        .foregroundColor(Color(red: 58/255, green: 145/255, blue: 233/255))
+
+                    Text(" волонтёров нужно")
+                        .foregroundColor(.black.opacity(0.62))
+                }
             }
             .font(.system(size: 14, weight: .regular, design: .serif))
 
@@ -330,7 +366,11 @@ struct EventDetailsView: View {
     }
 
     private var remainingSlots: Int {
-        max(event.volunteersNeeded - (event.acceptedCount ?? 0), 0)
+        max(event.volunteersNeeded - acceptedParticipants, 0)
+    }
+
+    private var acceptedParticipants: Int {
+        min(max(event.acceptedCount ?? 0, 0), event.volunteersNeeded)
     }
 
     private var participationButtonTitle: String {
@@ -345,8 +385,12 @@ struct EventDetailsView: View {
             if remainingSlots <= 0 {
                 return "Мест нет"
             }
-            return event.isCreator == true ? "Участвовать как волонтёр" : "Участвовать"
+            return "Участвовать"
         }
+    }
+
+    private var shouldShowParticipationButton: Bool {
+        event.isCreator != true
     }
 
     private var isParticipationButtonDisabled: Bool {

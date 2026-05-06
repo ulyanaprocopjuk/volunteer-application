@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_optional_user
 from app.db import get_db
 from app.models import User
-from app.schemas import CreateEventRequest, CurrentCountryEventResponse, EventResponse
+from app.schemas import (
+    CreateEventRequest,
+    CurrentCountryEventResponse,
+    EventParticipantResponse,
+    EventResponse,
+    RemoveEventParticipantRequest,
+)
 from app.services.events_service import event_service
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -31,6 +37,15 @@ def apply_to_event(
     return event_service.apply_to_event(db, event_id, current_user)
 
 
+@router.get("/{event_id}/applications", response_model=list[EventParticipantResponse])
+def list_event_applications(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.list_event_applications(db, event_id, current_user)
+
+
 @router.post("/applications/{application_id}/accept", response_model=EventResponse)
 def accept_event_application(
     application_id: int,
@@ -47,6 +62,16 @@ def reject_event_application(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     return event_service.reject_application(db, application_id, current_user)
+
+
+@router.post("/applications/{application_id}/remove", response_model=EventResponse)
+def remove_event_participant(
+    application_id: int,
+    payload: RemoveEventParticipantRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.remove_participant(db, application_id, current_user, payload.reason)
 
 
 @router.get("/my", response_model=list[EventResponse])

@@ -8,6 +8,8 @@ protocol EventAPIProtocol {
     func applyToEvent(id: String, token: String) async throws -> EventResponse
     func acceptApplication(id: Int, token: String) async throws -> EventResponse
     func rejectApplication(id: Int, token: String) async throws -> EventResponse
+    func fetchEventApplications(eventID: String, token: String) async throws -> [EventParticipantResponse]
+    func removeParticipant(applicationID: Int, reason: String, token: String) async throws -> EventResponse
     func fetchEventFeed(searchText: String?, token: String?) async throws -> [EventResponse]
     func fetchEventFeed(searchText: String?, filters: EventFeedFilters, token: String?) async throws -> [EventResponse]
 }
@@ -113,6 +115,28 @@ final class EventAPI: EventAPIProtocol {
 
     func rejectApplication(id: Int, token: String) async throws -> EventResponse {
         try await postEventAction(path: "api/events/applications/\(id)/reject", token: token)
+    }
+
+    func fetchEventApplications(eventID: String, token: String) async throws -> [EventParticipantResponse] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/applications"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([EventParticipantResponse].self, from: data)
+    }
+
+    func removeParticipant(applicationID: Int, reason: String, token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/applications/\(applicationID)/remove"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(RemoveEventParticipantRequest(reason: reason))
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
     }
 
     func fetchEventFeed(searchText: String?, token: String?) async throws -> [EventResponse] {

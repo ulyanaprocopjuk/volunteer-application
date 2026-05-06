@@ -1,5 +1,11 @@
 from .auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
-from .events import CreateEventRequest, CurrentCountryEventResponse, EventResponse
+from .events import (
+    CreateEventRequest,
+    CurrentCountryEventResponse,
+    EventParticipantResponse,
+    EventResponse,
+    RemoveEventParticipantRequest,
+)
 from .geocoding import ForwardGeocodeResponse, GeocodingSuggestionResponse, ReverseGeocodeResponse
 from .notifications import NotificationResponse
 from .profile import ProfileResponse, ProfileUpsertRequest
@@ -15,6 +21,8 @@ __all__ = [
     "ProfileResponse",
     "CreateEventRequest",
     "EventResponse",
+    "EventParticipantResponse",
+    "RemoveEventParticipantRequest",
     "CurrentCountryEventResponse",
     "NotificationResponse",
     "GeocodingSuggestionResponse",

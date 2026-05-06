@@ -129,6 +129,56 @@ struct EventPhotoUploadResponse: Decodable {
     }
 }
 
+struct EventParticipantResponse: Decodable, Identifiable, Hashable {
+    let applicationID: Int
+    let eventID: String
+    let eventTitle: String
+    let status: String
+    let isCreator: Bool
+    let profile: ProfileResponse
+
+    var id: Int {
+        applicationID
+    }
+
+    var applicationStatus: EventApplicationDisplayStatus {
+        EventApplicationDisplayStatus(rawValue: status) ?? .pending
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case applicationID = "application_id"
+        case eventID = "event_id"
+        case eventTitle = "event_title"
+        case status
+        case isCreator = "is_creator"
+        case profile
+    }
+}
+
+enum EventApplicationDisplayStatus: String {
+    case pending
+    case accepted
+    case rejected
+    case cancelled
+
+    var title: String {
+        switch self {
+        case .pending:
+            return "Ожидает решения"
+        case .accepted:
+            return "Принята"
+        case .rejected:
+            return "Отклонена"
+        case .cancelled:
+            return "Удалён"
+        }
+    }
+}
+
+struct RemoveEventParticipantRequest: Encodable {
+    let reason: String
+}
+
 enum MyEventsFilter: String {
     case active
     case history

@@ -8,8 +8,9 @@ struct AvatarUploadResponse: Decodable {
     }
 }
 
-struct ProfileResponse: Decodable {
+struct ProfileResponse: Decodable, Identifiable, Hashable {
     let id: Int
+    let userID: Int?
     let type: String?
     let avatarURL: String?
     let firstName: String?
@@ -24,6 +25,7 @@ struct ProfileResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case id, type, phone, email, city, country, skills, about
+        case userID = "user_id"
         case avatarURL = "avatar_url"
         case firstName = "first_name"
         case lastName = "last_name"
