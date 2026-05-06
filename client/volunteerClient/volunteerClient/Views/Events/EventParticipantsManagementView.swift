@@ -198,11 +198,6 @@ struct EventParticipantsManagementView: View {
                             .font(.system(size: 16, weight: .semibold, design: .serif))
                             .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                             .lineLimit(2)
-
-                        Text(participant.eventTitle)
-                            .font(.system(size: 13, weight: .regular, design: .serif))
-                            .foregroundColor(.black.opacity(0.48))
-                            .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -226,11 +221,7 @@ struct EventParticipantsManagementView: View {
             .buttonStyle(.plain)
         }
         .padding(14)
-        .background(Color.white)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(red: 68/255, green: 185/255, blue: 255/255), lineWidth: 1)
-        )
+        .background(Color(.systemGray6).opacity(0.65))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
@@ -249,7 +240,7 @@ struct EventParticipantsManagementView: View {
                                 .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                                 .lineLimit(2)
 
-                            Text(application.applicationStatus.title)
+                            Text(applicationStatusText(application.applicationStatus))
                                 .font(.system(size: 13, weight: .semibold, design: .serif))
                                 .foregroundColor(statusColor(application.applicationStatus))
                         }
@@ -294,6 +285,7 @@ struct EventParticipantsManagementView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(filled ? .white : Color(red: 44/255, green: 67/255, blue: 102/255))
                 .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
                 .frame(height: 34)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -305,7 +297,21 @@ struct EventParticipantsManagementView: View {
                 )
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .disabled(viewModel.isLoading)
+    }
+
+    private func applicationStatusText(_ status: EventApplicationDisplayStatus) -> String {
+        switch status {
+        case .pending:
+            return "Ожидает решения"
+        case .accepted:
+            return "Заявка принята"
+        case .rejected:
+            return "Заявка отклонена"
+        case .cancelled:
+            return "Заявка удалена"
+        }
     }
 
     private func statusColor(_ status: EventApplicationDisplayStatus) -> Color {
