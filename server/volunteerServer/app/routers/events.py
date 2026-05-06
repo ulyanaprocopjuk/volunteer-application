@@ -7,6 +7,7 @@ from app.api.deps import get_current_user, get_optional_user
 from app.db import get_db
 from app.models import User
 from app.schemas import (
+    CancelEventRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
     EventParticipantResponse,
@@ -26,6 +27,16 @@ def create_event(
     background_tasks: BackgroundTasks,
 ):
     return event_service.create_event(db, payload, current_user, background_tasks)
+
+
+@router.post("/{event_id}/cancel", response_model=EventResponse)
+def cancel_event(
+    event_id: str,
+    payload: CancelEventRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.cancel_event(db, event_id, current_user, payload.reason)
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)

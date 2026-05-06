@@ -1,5 +1,6 @@
 from .auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
 from .events import (
+    CancelEventRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
     EventParticipantResponse,
@@ -23,6 +24,7 @@ __all__ = [
     "EventResponse",
     "EventParticipantResponse",
     "RemoveEventParticipantRequest",
+    "CancelEventRequest",
     "CurrentCountryEventResponse",
     "NotificationResponse",
     "GeocodingSuggestionResponse",

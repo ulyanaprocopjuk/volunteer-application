@@ -125,7 +125,7 @@ class EventService:
             )
         elif normalized_filter == "history":
             query = query.where(
-                func.lower(Event.status).in_(("rejected", "completed"))
+                func.lower(Event.status).in_(("rejected", "completed", "cancelled"))
             )
 
         events = db.scalars(query).all()
@@ -335,6 +335,44 @@ class EventService:
             user=user,
             new_status=EventApplicationStatus.rejected,
         )
+
+    def cancel_event(self, db: Session, event_id: str, user: User, reason: str) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can cancel event")
+
+        normalized_status = (event.status or "").strip().lower()
+        if normalized_status not in ("pending", "approved", "active"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event cannot be cancelled")
+
+        normalized_reason = reason.strip()
+        event.status = "cancelled"
+
+        accepted_applications = db.scalars(
+            select(EventApplication).where(
+                EventApplication.event_id == event.id,
+                EventApplication.status == EventApplicationStatus.accepted,
+            )
+        ).all()
+
+        event_title = event.title.strip() or "событие"
+        for application in accepted_applications:
+            if application.volunteer.user_id != user.id:
+                notification_service.create(
+                    db,
+                    application.volunteer.user_id,
+                    f"Событие «{event_title}» отменено. Причина: {normalized_reason}",
+                    event_id=event.id,
+                )
+
+        db.commit()
+        db.refresh(event)
+        response = self._response(db, event, user)
+        response.message = "Событие отменено"
+        return response
 
     def delete_event(self, db: Session, event_id: str, user: User) -> None:
         event = self.get_event(db, event_id)

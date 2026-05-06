@@ -76,6 +76,7 @@ class EventResponse(BaseModel):
             "approved": "Подтверждено",
             "active": "Подтверждено",
             "rejected": "Отклонено",
+            "cancelled": "Отменено",
             "completed": "Завершено",
         }.get(value.lower(), value)
 
@@ -92,6 +93,18 @@ class EventParticipantResponse(BaseModel):
 
 
 class RemoveEventParticipantRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("reason is required")
+        return value
+
+
+class CancelEventRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
     @field_validator("reason")

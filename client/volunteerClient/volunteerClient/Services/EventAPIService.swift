@@ -9,6 +9,7 @@ protocol EventAPIProtocol {
     func cancelApplication(eventID: String, token: String) async throws -> EventResponse
     func deleteEvent(id: String, token: String) async throws
     func startEvent(id: String, token: String) async throws -> EventResponse
+    func cancelEvent(id: String, reason: String, token: String) async throws -> EventResponse
     func acceptApplication(id: Int, token: String) async throws -> EventResponse
     func rejectApplication(id: Int, token: String) async throws -> EventResponse
     func fetchEventApplications(eventID: String, token: String) async throws -> [EventParticipantResponse]
@@ -133,6 +134,18 @@ final class EventAPI: EventAPIProtocol {
 
     func startEvent(id: String, token: String) async throws -> EventResponse {
         try await postEventAction(path: "api/events/\(id)/start", token: token)
+    }
+
+    func cancelEvent(id: String, reason: String, token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(id)/cancel"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(["reason": reason])
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
     }
 
     func acceptApplication(id: Int, token: String) async throws -> EventResponse {

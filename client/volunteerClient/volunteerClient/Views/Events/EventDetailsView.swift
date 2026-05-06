@@ -12,6 +12,8 @@ struct EventDetailsView: View {
     @State private var showsParticipantsManagement = false
     @State private var showsCancelAlert = false
     @State private var showsDeleteAlert = false
+    @State private var showsCancelEventPrompt = false
+    @State private var cancelEventReason = ""
 
     private let eventImageSize: CGFloat = 56
 
@@ -69,6 +71,19 @@ struct EventDetailsView: View {
             Button("Отмена", role: .cancel) { }
         } message: {
             Text("Событие будет удалено у всех участников.")
+        }
+        .alert("Отменить событие", isPresented: $showsCancelEventPrompt) {
+            TextField("Причина отмены", text: $cancelEventReason)
+            Button("Подтвердить", role: .destructive) {
+                let reason = cancelEventReason
+                cancelEventReason = ""
+                Task { await cancelEvent(reason: reason) }
+            }
+            Button("Назад", role: .cancel) {
+                cancelEventReason = ""
+            }
+        } message: {
+            Text("Укажите причину. Все участники получат уведомление.")
         }
         .overlay {
             if let message {
@@ -194,7 +209,7 @@ struct EventDetailsView: View {
             }
 
             if event.isCreator == true, isAlmostStarting, session != nil {
-                startButton
+                organizerStartRow
                     .padding(.top, 22)
             }
         }
@@ -359,27 +374,51 @@ struct EventDetailsView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private var startButton: some View {
-        Button {
-            Task { await startEvent() }
-        } label: {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+    private var organizerStartRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                Task { await startEvent() }
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                if isParticipationLoading {
-                    ProgressView().tint(.white)
-                } else {
-                    Text("Начать")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                    if isParticipationLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Начать")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 48)
+            .buttonStyle(.plain)
+            .disabled(isParticipationLoading)
+
+            Button {
+                cancelEventReason = ""
+                showsCancelEventPrompt = true
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.5), lineWidth: 1)
+                        )
+
+                    Text("Отменить")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+            }
+            .buttonStyle(.plain)
+            .disabled(isParticipationLoading)
         }
-        .buttonStyle(.plain)
-        .disabled(isParticipationLoading)
     }
 
     private var isAlmostStarting: Bool {
@@ -566,6 +605,24 @@ struct EventDetailsView: View {
             }
             currentEvent = updatedEvent
             showMessage(updatedEvent.message ?? "Событие началось")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func cancelEvent(reason: String) async {
+        guard let session else { return }
+
+        isParticipationLoading = true
+        errorMessage = nil
+        defer { isParticipationLoading = false }
+
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.cancelEvent(id: currentEvent.id, reason: reason, token: token)
+            }
+            currentEvent = updatedEvent
+            showMessage(updatedEvent.message ?? "Событие отменено")
         } catch {
             errorMessage = error.localizedDescription
         }
