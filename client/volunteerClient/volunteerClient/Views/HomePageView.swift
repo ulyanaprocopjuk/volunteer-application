@@ -77,7 +77,7 @@ struct HomePageView: View {
                 }
             }
             .fullScreenCover(isPresented: $isNotificationsPresented) {
-                NotificationsListView(viewModel: notificationModel)
+                NotificationsListView(viewModel: notificationModel, session: session)
             }
     }
 

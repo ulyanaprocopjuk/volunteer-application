@@ -6,6 +6,9 @@ protocol EventAPIProtocol {
     func fetchMyEvents(filter: MyEventsFilter?, token: String?) async throws -> [EventResponse]
     func fetchEvent(id: String, token: String?) async throws -> EventResponse
     func applyToEvent(id: String, token: String) async throws -> EventResponse
+    func cancelApplication(eventID: String, token: String) async throws -> EventResponse
+    func deleteEvent(id: String, token: String) async throws
+    func startEvent(id: String, token: String) async throws -> EventResponse
     func acceptApplication(id: Int, token: String) async throws -> EventResponse
     func rejectApplication(id: Int, token: String) async throws -> EventResponse
     func fetchEventApplications(eventID: String, token: String) async throws -> [EventParticipantResponse]
@@ -107,6 +110,29 @@ final class EventAPI: EventAPIProtocol {
 
     func applyToEvent(id: String, token: String) async throws -> EventResponse {
         try await postEventAction(path: "api/events/\(id)/applications", token: token)
+    }
+
+    func cancelApplication(eventID: String, token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/applications"))
+        urlRequest.httpMethod = "DELETE"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    func deleteEvent(id: String, token: String) async throws {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(id)"))
+        urlRequest.httpMethod = "DELETE"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+    }
+
+    func startEvent(id: String, token: String) async throws -> EventResponse {
+        try await postEventAction(path: "api/events/\(id)/start", token: token)
     }
 
     func acceptApplication(id: Int, token: String) async throws -> EventResponse {

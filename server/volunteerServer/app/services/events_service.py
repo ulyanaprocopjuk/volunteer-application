@@ -336,6 +336,62 @@ class EventService:
             new_status=EventApplicationStatus.rejected,
         )
 
+    def delete_event(self, db: Session, event_id: str, user: User) -> None:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can delete event")
+
+        db.delete(event)
+        db.commit()
+
+    def start_event(self, db: Session, event_id: str, user: User) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can start event")
+
+        normalized_status = (event.status or "").strip().lower()
+        if normalized_status not in ("approved", "active"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event cannot be started")
+
+        event.status = "active"
+        db.commit()
+        db.refresh(event)
+
+        response = self._response(db, event, user)
+        response.message = "Событие началось"
+        return response
+
+    def cancel_application(self, db: Session, event_id: str, user: User) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        profile = self._profile_for_user(db, user)
+        application = self._application_for_profile(db, event_id, profile.id)
+
+        if application is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+        if application.status != EventApplicationStatus.pending:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only pending applications can be cancelled",
+            )
+
+        application.status = EventApplicationStatus.cancelled
+        db.commit()
+        db.refresh(event)
+
+        response = self._response(db, event, user)
+        response.message = "Заявка отменена"
+        return response
+
     def list_event_applications(
         self,
         db: Session,

@@ -12,10 +12,10 @@ struct NotificationsListView: View {
         self.session = session
     }
 
-    init(viewModel: NotificationViewModel) {
+    init(viewModel: NotificationViewModel, session: AppSession? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel)
         self.shouldLoadOnAppear = false
-        self.session = nil
+        self.session = session
     }
 
     var body: some View {

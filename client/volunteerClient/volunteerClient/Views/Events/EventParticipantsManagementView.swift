@@ -10,14 +10,17 @@ struct EventParticipantsManagementView: View {
     @State private var participantForRemoval: EventParticipantResponse?
     @State private var removalReason = ""
     @State private var showsRemovalPrompt = false
+    private let participantsOnly: Bool
 
     init(
         eventID: String,
         session: AppSession,
         initialSegment: EventParticipantsSegment = .participants,
+        participantsOnly: Bool = false,
         api: EventAPIProtocol? = nil
     ) {
         _selectedSegment = State(initialValue: initialSegment)
+        self.participantsOnly = participantsOnly
         _viewModel = StateObject(
             wrappedValue: EventParticipantsManagementViewModel(eventID: eventID, session: session, api: api)
         )
@@ -27,9 +30,11 @@ struct EventParticipantsManagementView: View {
         VStack(spacing: 0) {
             headerView
 
-            segmentControl
-                .padding(.horizontal, 20)
-                .padding(.top, 14)
+            if !participantsOnly {
+                segmentControl
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+            }
 
             content
         }
@@ -139,12 +144,33 @@ struct EventParticipantsManagementView: View {
             Spacer()
             ProgressView()
             Spacer()
+        } else if participantsOnly {
+            acceptedOnlyContent
         } else {
             switch selectedSegment {
             case .participants:
                 participantsContent
             case .applications:
                 applicationsContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var acceptedOnlyContent: some View {
+        let accepted = viewModel.applications.filter { $0.applicationStatus == .accepted }
+        if accepted.isEmpty {
+            emptyState("Подтверждённых участников нет")
+        } else {
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 10) {
+                    ForEach(accepted) { participant in
+                        participantRow(participant)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 40)
             }
         }
     }

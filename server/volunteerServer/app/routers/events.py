@@ -28,6 +28,33 @@ def create_event(
     return event_service.create_event(db, payload, current_user, background_tasks)
 
 
+@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_event(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    event_service.delete_event(db, event_id, current_user)
+
+
+@router.post("/{event_id}/start", response_model=EventResponse)
+def start_event(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.start_event(db, event_id, current_user)
+
+
+@router.delete("/{event_id}/applications", response_model=EventResponse)
+def cancel_application(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.cancel_application(db, event_id, current_user)
+
+
 @router.post("/{event_id}/applications", response_model=EventResponse)
 def apply_to_event(
     event_id: str,

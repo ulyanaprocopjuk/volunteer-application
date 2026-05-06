@@ -10,6 +10,8 @@ struct EventDetailsView: View {
     @State private var message: String?
     @State private var errorMessage: String?
     @State private var showsParticipantsManagement = false
+    @State private var showsCancelAlert = false
+    @State private var showsDeleteAlert = false
 
     private let eventImageSize: CGFloat = 56
 
@@ -52,6 +54,22 @@ struct EventDetailsView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .alert("Отменить заявку?", isPresented: $showsCancelAlert) {
+            Button("Да, отменить", role: .destructive) {
+                Task { await cancelApplication() }
+            }
+            Button("Нет", role: .cancel) { }
+        } message: {
+            Text("Желаете отменить заявку на участие в событии?")
+        }
+        .alert("Удалить событие?", isPresented: $showsDeleteAlert) {
+            Button("Удалить", role: .destructive) {
+                Task { await deleteEvent() }
+            }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Событие будет удалено у всех участников.")
+        }
         .overlay {
             if let message {
                 Text(message)
@@ -68,7 +86,11 @@ struct EventDetailsView: View {
         }
         .fullScreenCover(isPresented: $showsParticipantsManagement) {
             if let session {
-                EventParticipantsManagementView(eventID: event.id, session: session)
+                EventParticipantsManagementView(
+                    eventID: event.id,
+                    session: session,
+                    participantsOnly: isAlmostStarting
+                )
             }
         }
     }
@@ -100,20 +122,39 @@ struct EventDetailsView: View {
                 Spacer()
 
                 if event.isCreator == true, session != nil {
-                    Button {
-                        showsParticipantsManagement = true
-                    } label: {
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(.black.opacity(0.75))
-                            .frame(width: 36, height: 36)
-                            .background(
-                                Circle()
-                                    .stroke(Color.black.opacity(0.35), lineWidth: 1)
-                                    .background(Circle().fill(Color.clear))
-                            )
+                    HStack(spacing: 10) {
+                        if !isAlmostStarting {
+                            Button {
+                                showsDeleteAlert = true
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                                    .frame(width: 36, height: 36)
+                                    .background(
+                                        Circle()
+                                            .stroke(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.4), lineWidth: 1)
+                                            .background(Circle().fill(Color.clear))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button {
+                            showsParticipantsManagement = true
+                        } label: {
+                            Image(systemName: "list.bullet.rectangle")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(.black.opacity(0.75))
+                                .frame(width: 36, height: 36)
+                                .background(
+                                    Circle()
+                                        .stroke(Color.black.opacity(0.35), lineWidth: 1)
+                                        .background(Circle().fill(Color.clear))
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 20)
@@ -149,6 +190,11 @@ struct EventDetailsView: View {
 
             if shouldShowParticipationButton {
                 participationButton
+                    .padding(.top, 22)
+            }
+
+            if event.isCreator == true, isAlmostStarting, session != nil {
+                startButton
                     .padding(.top, 22)
             }
         }
@@ -279,23 +325,31 @@ struct EventDetailsView: View {
 
     private var participationButton: some View {
         Button {
-            Task {
-                await applyToEvent()
+            if event.userApplicationStatus == "pending" {
+                showsCancelAlert = true
+            } else {
+                Task { await applyToEvent() }
             }
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isParticipationButtonDisabled
-                          ? Color.gray.opacity(0.28)
-                          : Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .fill(participationButtonBackground)
+                    .overlay(
+                        Group {
+                            if event.userApplicationStatus == "pending" {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.5), lineWidth: 1)
+                            }
+                        }
+                    )
 
                 if isParticipationLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(participationButtonForeground)
                 } else {
                     Text(participationButtonTitle)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(isParticipationButtonDisabled ? .black.opacity(0.42) : .white)
+                        .foregroundColor(participationButtonForeground)
                 }
             }
             .frame(width: 220, height: 48)
@@ -303,6 +357,61 @@ struct EventDetailsView: View {
         .buttonStyle(.plain)
         .disabled(isParticipationButtonDisabled)
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var startButton: some View {
+        Button {
+            Task { await startEvent() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                if isParticipationLoading {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Начать")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+        }
+        .buttonStyle(.plain)
+        .disabled(isParticipationLoading)
+    }
+
+    private var isAlmostStarting: Bool {
+        Date() >= startDate.addingTimeInterval(-30 * 60)
+    }
+
+    private var participationButtonBackground: Color {
+        switch event.userApplicationStatus {
+        case "pending":
+            return Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.10)
+        case "accepted":
+            return Color(red: 44/255, green: 67/255, blue: 102/255)
+        default:
+            if isParticipationButtonDisabled {
+                return Color.gray.opacity(0.28)
+            }
+            return Color(red: 44/255, green: 67/255, blue: 102/255)
+        }
+    }
+
+    private var participationButtonForeground: Color {
+        switch event.userApplicationStatus {
+        case "pending":
+            return Color(red: 44/255, green: 67/255, blue: 102/255)
+        case "accepted":
+            return .white
+        default:
+            if isParticipationButtonDisabled {
+                return .black.opacity(0.42)
+            }
+            return .white
+        }
     }
 
     private func infoRow(icon: String, text: String) -> some View {
@@ -376,9 +485,9 @@ struct EventDetailsView: View {
     private var participationButtonTitle: String {
         switch event.userApplicationStatus {
         case "accepted":
-            return "Уже участвую"
+            return "Вы участник"
         case "pending":
-            return "Заявка отправлена"
+            return "На рассмотрении"
         case "rejected":
             return "Заявка отклонена"
         default:
@@ -397,7 +506,6 @@ struct EventDetailsView: View {
         isParticipationLoading
             || session == nil
             || event.userApplicationStatus == "accepted"
-            || event.userApplicationStatus == "pending"
             || event.userApplicationStatus == "rejected"
             || remainingSlots <= 0
     }
@@ -427,6 +535,55 @@ struct EventDetailsView: View {
             }
             currentEvent = updatedEvent
             showMessage(updatedEvent.message ?? "Заявка отправлена")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteEvent() async {
+        guard let session else { return }
+
+        do {
+            try await session.performAuthorizedRequest { token in
+                try await api.deleteEvent(id: currentEvent.id, token: token)
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func startEvent() async {
+        guard let session else { return }
+
+        isParticipationLoading = true
+        errorMessage = nil
+        defer { isParticipationLoading = false }
+
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.startEvent(id: currentEvent.id, token: token)
+            }
+            currentEvent = updatedEvent
+            showMessage(updatedEvent.message ?? "Событие началось")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func cancelApplication() async {
+        guard let session else { return }
+
+        isParticipationLoading = true
+        errorMessage = nil
+        defer { isParticipationLoading = false }
+
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.cancelApplication(eventID: currentEvent.id, token: token)
+            }
+            currentEvent = updatedEvent
+            showMessage(updatedEvent.message ?? "Заявка отменена")
         } catch {
             errorMessage = error.localizedDescription
         }
