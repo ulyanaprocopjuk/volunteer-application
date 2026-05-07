@@ -3,17 +3,18 @@ import Combine
 
 @MainActor
 final class NewPasswordViewModel: ObservableObject {
+    @Published var code = ""
     @Published var password = ""
     @Published var confirmPassword = ""
     @Published var isLoading = false
     @Published var didSave = false
     @Published var errorMessage: String?
 
-    let resetToken: String
+    let email: String
     private let authAPI: AuthAPIProtocol
 
-    init(resetToken: String, authAPI: AuthAPIProtocol? = nil) {
-        self.resetToken = resetToken
+    init(email: String, authAPI: AuthAPIProtocol? = nil) {
+        self.email = email
         self.authAPI = authAPI ?? AuthAPI()
     }
 
@@ -31,7 +32,10 @@ final class NewPasswordViewModel: ObservableObject {
     }
 
     var canSave: Bool {
-        passwordValidationErrors.isEmpty && password == confirmPassword && !confirmPassword.isEmpty
+        code.count == 6 &&
+        passwordValidationErrors.isEmpty &&
+        password == confirmPassword &&
+        !confirmPassword.isEmpty
     }
 
     func save() async {
@@ -41,7 +45,7 @@ final class NewPasswordViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            try await authAPI.resetPassword(token: resetToken, newPassword: password)
+            try await authAPI.resetPassword(email: email, code: code, newPassword: password)
             didSave = true
         } catch {
             errorMessage = error.localizedDescription
@@ -52,21 +56,21 @@ final class NewPasswordViewModel: ObservableObject {
 struct NewPasswordView: View {
     @StateObject private var vm: NewPasswordViewModel
     @FocusState private var focusedField: Field?
-    @EnvironmentObject private var session: AppSession
+    @Environment(\.dismiss) private var dismiss
 
     private enum Field: Hashable {
-        case password, confirmPassword
+        case code, password, confirmPassword
     }
 
-    init(resetToken: String) {
-        _vm = StateObject(wrappedValue: NewPasswordViewModel(resetToken: resetToken))
+    init(email: String) {
+        _vm = StateObject(wrappedValue: NewPasswordViewModel(email: email))
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                    .padding(.top, 190)
+                    .padding(.top, 40)
 
                 if vm.didSave {
                     successSection
@@ -84,7 +88,7 @@ struct NewPasswordView: View {
                     }
 
                     saveButton
-                        .padding(.top, 30)
+                        .padding(.top, 24)
                 }
             }
             .padding(.horizontal, 30)
@@ -93,25 +97,52 @@ struct NewPasswordView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color.white.ignoresSafeArea())
+        .navigationTitle("Новый пароль")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Новый пароль")
-                .font(.custom("NotoSans-SemiBold", size: 32))
-                .foregroundStyle(.black)
-
-            Text("Придумайте надёжный пароль для вашего аккаунта")
-                .font(.custom("NotoSans-Medium", size: 18))
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Введите код из письма и придумайте новый пароль")
+                .font(.custom("NotoSans-Medium", size: 16))
                 .foregroundStyle(.black.opacity(0.7))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var fields: some View {
         VStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Код из письма")
+                    .font(.custom("NotoSans-Medium", size: 14))
+                    .foregroundStyle(.black.opacity(0.6))
+                    .padding(.leading, 4)
+
+                TextField("6-значный код", text: $vm.code)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .code)
+                    .font(.custom("NotoSans-Medium", size: 24))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.black, lineWidth: 1))
+                    .foregroundStyle(.black)
+                    .onChange(of: vm.code) { _, newValue in
+                        vm.code = String(newValue.filter(\.isNumber).prefix(6))
+                    }
+            }
+
             VStack(alignment: .leading, spacing: 6) {
+                Text("Новый пароль")
+                    .font(.custom("NotoSans-Medium", size: 14))
+                    .foregroundStyle(.black.opacity(0.6))
+                    .padding(.leading, 4)
+
                 NewPasswordSecureField(
-                    placeholder: "Новый пароль",
+                    placeholder: "Введите пароль",
                     text: $vm.password,
                     focus: $focusedField,
                     field: .password,
@@ -133,8 +164,13 @@ struct NewPasswordView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
+                Text("Подтвердите пароль")
+                    .font(.custom("NotoSans-Medium", size: 14))
+                    .foregroundStyle(.black.opacity(0.6))
+                    .padding(.leading, 4)
+
                 NewPasswordSecureField(
-                    placeholder: "Подтвердите пароль",
+                    placeholder: "Повторите пароль",
                     text: $vm.confirmPassword,
                     focus: $focusedField,
                     field: .confirmPassword,
@@ -195,7 +231,8 @@ struct NewPasswordView: View {
             )
 
             Button {
-                session.pendingPasswordResetToken = nil
+                dismiss()
+                dismiss()
             } label: {
                 Text("Перейти ко входу")
                     .font(.custom("NotoSans-Bold", size: 18))
@@ -265,6 +302,7 @@ private struct NewPasswordSecureField<FieldID: Hashable>: View {
 }
 
 #Preview {
-    NewPasswordView(resetToken: "preview-token")
-        .environmentObject(AppSession())
+    NavigationStack {
+        NewPasswordView(email: "test@example.com")
+    }
 }

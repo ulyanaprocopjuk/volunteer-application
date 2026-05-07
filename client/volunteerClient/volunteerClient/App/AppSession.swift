@@ -21,7 +21,6 @@ final class AppSession: ObservableObject {
     @Published private(set) var token: String?
     @Published private(set) var currentUser: UserResponse?
     @Published var globalError: String?
-    @Published var pendingPasswordResetToken: String?
 
     private let authAPI: AuthAPIProtocol
     private let keychain: KeychainStorage

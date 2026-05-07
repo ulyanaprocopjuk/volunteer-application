@@ -51,25 +51,41 @@ struct ForgotPasswordView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                    .padding(.top, 210)
+                    .padding(.top, 120)
+
+                emailField
+                    .padding(.top, 32)
+
+                if let error = vm.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(.top, 8)
+                        .padding(.horizontal, 4)
+                }
+
+                sendButton
+                    .padding(.top, 20)
 
                 if vm.didSend {
                     successMessage
-                        .padding(.top, 32)
-                } else {
-                    emailField
-                        .padding(.top, 32)
-
-                    if let error = vm.errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .padding(.top, 8)
-                            .padding(.horizontal, 4)
-                    }
-
-                    sendButton
                         .padding(.top, 20)
+
+                    NavigationLink {
+                        NewPasswordView(email: vm.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+                    } label: {
+                        Text("Ввести код →")
+                            .font(.custom("NotoSans-Bold", size: 18))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 12)
                 }
 
                 backRow
@@ -89,7 +105,7 @@ struct ForgotPasswordView: View {
                 .font(.custom("NotoSans-Bold", size: 32))
                 .foregroundStyle(.black)
 
-            Text("Укажите почту, привязанную к аккаунту")
+            Text("Укажите почту — пришлём код для сброса")
                 .font(.custom("NotoSans-Medium", size: 16))
                 .foregroundStyle(.black.opacity(0.7))
         }
@@ -114,6 +130,7 @@ struct ForgotPasswordView: View {
                     RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.black, lineWidth: 1)
                 )
                 .foregroundStyle(.black)
+                .disabled(vm.didSend)
 
             if let emailErr = vm.emailError {
                 Text(emailErr)
@@ -131,12 +148,11 @@ struct ForgotPasswordView: View {
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(vm.canSend ? Color.black : Color.black.opacity(0.45))
-
+                    .fill((vm.canSend && !vm.didSend) ? Color.black : Color.black.opacity(0.35))
                 if vm.isLoading {
                     ProgressView().tint(.white)
                 } else {
-                    Text("Отправить ссылку")
+                    Text(vm.didSend ? "Код отправлен" : "Отправить код")
                         .font(.custom("NotoSans-Bold", size: 20))
                         .foregroundStyle(.white)
                 }
@@ -145,49 +161,43 @@ struct ForgotPasswordView: View {
             .frame(height: 52)
         }
         .buttonStyle(.plain)
-        .disabled(!vm.canSend || vm.isLoading)
+        .disabled(!vm.canSend || vm.isLoading || vm.didSend)
     }
 
     private var successMessage: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "envelope.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundStyle(Color(red: 44/255, green: 67/255, blue: 102/255))
+        HStack(spacing: 10) {
+            Image(systemName: "envelope.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                Text("Письмо отправлено")
-                    .font(.custom("NotoSans-Bold", size: 18))
-                    .foregroundStyle(.black)
-            }
-
-            Text("Если такая почта зарегистрирована, вы получите письмо с инструкцией по сбросу пароля.")
-                .font(.custom("NotoSans-Medium", size: 15))
+            Text("Если почта зарегистрирована, вы получите письмо с кодом.")
+                .font(.custom("NotoSans-Medium", size: 14))
                 .foregroundStyle(.black.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(18)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.08))
         )
     }
 
     private var backRow: some View {
-        HStack(spacing: 0) {
-            Button {
-                dismiss()
-            } label: {
-                Text("← Вернуться к входу")
-                    .font(.custom("NotoSans-Medium", size: 14))
-                    .underline()
-                    .foregroundStyle(.black)
-            }
-            .buttonStyle(.plain)
+        Button {
+            dismiss()
+        } label: {
+            Text("← Вернуться к входу")
+                .font(.custom("NotoSans-Medium", size: 14))
+                .underline()
+                .foregroundStyle(.black)
         }
+        .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
 #Preview {
-    ForgotPasswordView()
+    NavigationStack {
+        ForgotPasswordView()
+    }
 }

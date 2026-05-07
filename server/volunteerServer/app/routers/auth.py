@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import APP_BASE_URL, EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS
+from app.config import EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS
 from app.db import get_db
 from app.models import EmailVerificationCode, PasswordResetToken, RefreshToken, User, UserRole
 from app.schemas import (
@@ -31,7 +31,7 @@ from app.services.auth_service import (
     normalize_username,
     revoke_refresh_token,
 )
-from app.services.email_service import send_password_reset_link, send_verification_code
+from app.services.email_service import send_password_reset_code, send_verification_code
 from app.services.rate_limit import rate_limiter
 from app.api.deps import get_current_user
 
@@ -183,20 +183,19 @@ def forgot_password(
     user = db.scalar(select(User).where(User.email == email))
 
     if user is not None and user.is_active:
-        raw_token = generate_reset_token()
-        token_hash = hash_code(raw_token)
+        code = generate_verification_code()
+        code_hash = hash_code(code)
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=_RESET_TOKEN_EXPIRE_MINUTES)
 
         db.add(PasswordResetToken(
             user_id=user.id,
-            token_hash=token_hash,
+            token_hash=code_hash,
             expires_at=expires_at,
         ))
         db.commit()
 
-        reset_url = f"{APP_BASE_URL}reset-password?token={raw_token}"
-        background_tasks.add_task(send_password_reset_link, email, reset_url)
+        background_tasks.add_task(send_password_reset_code, email, code)
 
     return {"status": "sent"}
 
@@ -206,12 +205,20 @@ def reset_password(
     payload: ResetPasswordRequest,
     db: Annotated[Session, Depends(get_db)],
 ):
-    token_hash = hash_code(payload.token)
     now = datetime.now(timezone.utc)
 
+    user = db.scalar(select(User).where(User.email == payload.email))
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired code",
+        )
+
+    code_hash = hash_code(payload.code)
     stored = db.scalar(
         select(PasswordResetToken)
-        .where(PasswordResetToken.token_hash == token_hash)
+        .where(PasswordResetToken.user_id == user.id)
+        .where(PasswordResetToken.token_hash == code_hash)
         .where(PasswordResetToken.used_at.is_(None))
         .where(PasswordResetToken.revoked_at.is_(None))
     )
@@ -219,14 +226,7 @@ def reset_password(
     if stored is None or stored.expires_at.replace(tzinfo=timezone.utc) <= now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired reset link",
-        )
-
-    user = db.get(User, stored.user_id)
-    if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired reset link",
+            detail="Invalid or expired code",
         )
 
     user.password_hash = hash_password(payload.new_password)

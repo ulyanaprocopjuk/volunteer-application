@@ -22,11 +22,13 @@ struct ForgotPasswordRequest: Encodable {
 }
 
 struct ResetPasswordRequest: Encodable {
-    let token: String
+    let email: String
+    let code: String
     let newPassword: String
 
     enum CodingKeys: String, CodingKey {
-        case token
+        case email
+        case code
         case newPassword = "new_password"
     }
 }

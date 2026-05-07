@@ -55,18 +55,18 @@ def send_verification_code(to_email: str, code: str) -> None:
     _send_email(to_email, subject, html_body)
 
 
-def send_password_reset_link(to_email: str, reset_url: str) -> None:
+def send_password_reset_code(to_email: str, code: str) -> None:
     subject = "Сброс пароля"
     html_body = f"""
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
         <h2 style="color: #2c4366;">Сброс пароля</h2>
-        <p>Для сброса пароля нажмите на кнопку ниже. Ссылка действует 60 минут.</p>
-        <a href="{reset_url}"
-           style="display: inline-block; background: #2c4366; color: white;
-                  padding: 14px 28px; border-radius: 10px; text-decoration: none;
-                  font-weight: bold; margin: 16px 0;">
-            Сбросить пароль
-        </a>
+        <p>Ваш код для сброса пароля:</p>
+        <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px;
+                    background: #f4f6fb; padding: 20px; border-radius: 12px;
+                    text-align: center; color: #2c4366;">
+            {code}
+        </div>
+        <p style="color: #666; margin-top: 16px;">Код действует 60 минут.</p>
         <p style="color: #666; font-size: 13px;">
             Если вы не запрашивали сброс пароля — просто проигнорируйте это письмо.
         </p>

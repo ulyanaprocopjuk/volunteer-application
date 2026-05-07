@@ -10,7 +10,7 @@ protocol AuthAPIProtocol {
     func sendVerificationCode(token: String) async throws
     func verifyEmail(code: String, token: String) async throws
     func forgotPassword(email: String) async throws
-    func resetPassword(token: String, newPassword: String) async throws
+    func resetPassword(email: String, code: String, newPassword: String) async throws
 }
 
 enum AppNetworkError: LocalizedError {
@@ -93,8 +93,8 @@ final class AuthAPI: AuthAPIProtocol {
         )
     }
 
-    func resetPassword(token: String, newPassword: String) async throws {
-        let body = ResetPasswordRequest(token: token, newPassword: newPassword)
+    func resetPassword(email: String, code: String, newPassword: String) async throws {
+        let body = ResetPasswordRequest(email: email, code: code, newPassword: newPassword)
         _ = try await performRequest(
             path: "/auth/reset-password",
             method: "POST",
