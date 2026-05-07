@@ -717,6 +717,226 @@ private extension ProfileResponse {
     }
 }
 
+// MARK: - Attendance Confirmation
+
+struct EventAttendanceConfirmationView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private let eventID: String
+    private let session: AppSession
+    private let api: EventAPIProtocol
+    private let onConfirmed: ((EventResponse) -> Void)?
+
+    @State private var participants: [EventParticipantResponse] = []
+    @State private var presentIDs: Set<Int> = []
+    @State private var isLoading = false
+    @State private var isStarting = false
+    @State private var errorMessage: String?
+
+    init(
+        eventID: String,
+        session: AppSession,
+        api: EventAPIProtocol? = nil,
+        onConfirmed: ((EventResponse) -> Void)? = nil
+    ) {
+        self.eventID = eventID
+        self.session = session
+        self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.onConfirmed = onConfirmed
+    }
+
+    private var acceptedParticipants: [EventParticipantResponse] {
+        participants.filter { $0.applicationStatus == .accepted && !$0.isCreator }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            attendanceHeader
+
+            if isLoading && participants.isEmpty {
+                Spacer()
+                ProgressView()
+                Spacer()
+            } else if acceptedParticipants.isEmpty {
+                Spacer()
+                Text("Подтверждённых участников нет")
+                    .font(.system(size: 17, weight: .regular, design: .serif))
+                    .foregroundColor(.black.opacity(0.55))
+                Spacer()
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 12) {
+                        ForEach(acceptedParticipants) { participant in
+                            attendanceRow(participant)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 24)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.white.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            confirmButton
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(.background)
+        }
+        .task { await loadParticipants() }
+        .alert("Ошибка", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { _ in errorMessage = nil }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var attendanceHeader: some View {
+        ZStack {
+            Color(.systemGray6)
+                .ignoresSafeArea(edges: .top)
+
+            HStack(spacing: 0) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.black.opacity(0.75))
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .stroke(Color.black.opacity(0.35), lineWidth: 1)
+                                .background(Circle().fill(Color.clear))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Text("Отметить присутствие")
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.78))
+                    .frame(maxWidth: .infinity)
+
+                Color.clear.frame(width: 36, height: 36)
+            }
+            .padding(.horizontal, 20)
+        }
+        .frame(height: 60)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func attendanceRow(_ participant: EventParticipantResponse) -> some View {
+        let isPresent = presentIDs.contains(participant.id)
+
+        return HStack(spacing: 14) {
+            ParticipantAvatarView(avatarURL: participant.profile.avatarURL, size: 52)
+
+            Text(participant.profile.displayName)
+                .font(.system(size: 16, weight: .semibold, design: .serif))
+                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            AttendanceToggle(isOn: isPresent) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isPresent {
+                        presentIDs.remove(participant.id)
+                    } else {
+                        presentIDs.insert(participant.id)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(Color(.systemGray6).opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var confirmButton: some View {
+        Button {
+            Task { await confirmAndStart() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .frame(height: 54)
+
+                if isStarting {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Подтвердить")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isStarting || isLoading)
+        .opacity((isStarting || isLoading) ? 0.6 : 1)
+    }
+
+    private func loadParticipants() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            participants = try await session.performAuthorizedRequest { token in
+                try await api.fetchEventApplications(eventID: eventID, token: token)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func confirmAndStart() async {
+        isStarting = true
+        defer { isStarting = false }
+
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.startEvent(id: eventID, token: token)
+            }
+            onConfirmed?(updatedEvent)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct AttendanceToggle: View {
+    let isOn: Bool
+    let onToggle: () -> Void
+
+    private let trackWidth: CGFloat = 56
+    private let trackHeight: CGFloat = 32
+    private let thumbDiameter: CGFloat = 26
+    private let thumbInset: CGFloat = 3
+
+    var body: some View {
+        Button(action: onToggle) {
+            ZStack {
+                RoundedRectangle(cornerRadius: trackHeight / 2, style: .continuous)
+                    .fill(isOn
+                        ? Color(red: 0.20, green: 0.72, blue: 0.35)
+                        : Color(red: 0.85, green: 0.20, blue: 0.20))
+                    .frame(width: trackWidth, height: trackHeight)
+
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: thumbDiameter, height: thumbDiameter)
+                    .shadow(color: .black.opacity(0.20), radius: 3, y: 1)
+                    .offset(x: isOn
+                        ? trackWidth / 2 - thumbDiameter / 2 - thumbInset
+                        : -(trackWidth / 2 - thumbDiameter / 2 - thumbInset))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 #Preview("Участник") {
     ParticipantProfileDetailsView(
         profile: ProfileResponse(

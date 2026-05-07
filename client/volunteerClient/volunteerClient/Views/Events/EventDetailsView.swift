@@ -10,6 +10,7 @@ struct EventDetailsView: View {
     @State private var message: String?
     @State private var errorMessage: String?
     @State private var showsParticipantsManagement = false
+    @State private var showsAttendanceConfirmation = false
     @State private var showsCancelAlert = false
     @State private var showsDeleteAlert = false
     @State private var showsCancelEventPrompt = false
@@ -110,6 +111,17 @@ struct EventDetailsView: View {
                     session: session,
                     participantsOnly: isAlmostStarting
                 )
+            }
+        }
+        .fullScreenCover(isPresented: $showsAttendanceConfirmation) {
+            if let session {
+                EventAttendanceConfirmationView(
+                    eventID: event.id,
+                    session: session
+                ) { updatedEvent in
+                    currentEvent = updatedEvent
+                    showMessage(updatedEvent.message ?? "Событие началось")
+                }
             }
         }
     }
@@ -389,25 +401,20 @@ struct EventDetailsView: View {
     private var organizerStartRow: some View {
         HStack(spacing: 10) {
             Button {
-                Task { await startEvent() }
+                showsAttendanceConfirmation = true
             } label: {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                    if isParticipationLoading {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text("Начать")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
+                    Text("Начать")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
             }
             .buttonStyle(.plain)
-            .disabled(isParticipationLoading)
 
             Button {
                 cancelEventReason = ""

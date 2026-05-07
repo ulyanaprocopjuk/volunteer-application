@@ -13,7 +13,6 @@ struct EventFormView: View {
     @State private var activePicker: ActivePicker?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showDirectionDropdown = false
-    @State private var directionButtonFrame: CGRect = .zero
 
     @State private var draftStartDate = Date()
     @State private var draftStartTime = Date()
@@ -329,21 +328,21 @@ struct EventFormView: View {
         .task(id: selectedPhotoItem) {
             await loadPhoto()
         }
-        .onPreferenceChange(DirectionButtonFrameKey.self) { frame in
-            directionButtonFrame = frame
-        }
-        .overlay {
-            if showDirectionDropdown {
-                DirectionFloatingDropdown(
-                    options: EventDirectionOption.allCases.map(\.rawValue),
-                    selectedValue: $viewModel.selectedDirection,
-                    anchorFrame: directionButtonFrame,
-                    onDismiss: {
-                        withAnimation(.easeOut(duration: 0.22)) {
-                            showDirectionDropdown = false
+        .overlayPreferenceValue(DirectionButtonAnchorKey.self) { anchor in
+            if showDirectionDropdown, let anchor {
+                GeometryReader { geo in
+                    DirectionFloatingDropdown(
+                        options: EventDirectionOption.allCases.map(\.rawValue),
+                        selectedValue: $viewModel.selectedDirection,
+                        frame: geo[anchor],
+                        onDismiss: {
+                            withAnimation(.easeOut(duration: 0.22)) {
+                                showDirectionDropdown = false
+                            }
                         }
-                    }
-                )
+                    )
+                }
+                .ignoresSafeArea()
                 .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topTrailing)))
             }
         }
@@ -500,9 +499,11 @@ private struct EventLabeledMultilineField: View {
     }
 }
 
-private struct DirectionButtonFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+private struct DirectionButtonAnchorKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
 }
 
 private struct EventDirectionDropdownField: View {
@@ -536,12 +537,7 @@ private struct EventDirectionDropdownField: View {
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .background(
-                    GeometryReader { geo in
-                        Color.clear
-                            .preference(key: DirectionButtonFrameKey.self, value: geo.frame(in: .global))
-                    }
-                )
+                .anchorPreference(key: DirectionButtonAnchorKey.self, value: .bounds) { $0 }
             }
 
             if trimmedValue.isEmpty {
@@ -562,65 +558,57 @@ private struct EventDirectionDropdownField: View {
 private struct DirectionFloatingDropdown: View {
     let options: [String]
     @Binding var selectedValue: String
-    let anchorFrame: CGRect
+    let frame: CGRect
     let onDismiss: () -> Void
 
     var body: some View {
-        GeometryReader { geo in
-            let origin = geo.frame(in: .global).origin
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .contentShape(Rectangle())
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss() }
 
-            ZStack(alignment: .topLeading) {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .ignoresSafeArea()
-                    .onTapGesture { onDismiss() }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(options, id: \.self) { option in
+                    Button {
+                        selectedValue = option
+                        onDismiss()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text(option)
+                                .font(.system(size: 15))
+                                .foregroundColor(.black)
+                                .multilineTextAlignment(.leading)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(options, id: \.self) { option in
-                        Button {
-                            selectedValue = option
-                            onDismiss()
-                        } label: {
-                            HStack(spacing: 12) {
-                                Text(option)
-                                    .font(.system(size: 15))
-                                    .foregroundColor(.black)
-                                    .multilineTextAlignment(.leading)
+                            Spacer(minLength: 12)
 
-                                Spacer(minLength: 12)
-
-                                if selectedValue == option {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                                }
+                            if selectedValue == option {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                             }
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
 
-                        if option != options.last {
-                            Divider().padding(.leading, 14)
-                        }
+                    if option != options.last {
+                        Divider().padding(.leading, 14)
                     }
                 }
-                .frame(width: 260)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.gray.opacity(0.18), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.15), radius: 18, y: 8)
-                .offset(
-                    x: anchorFrame.maxX - 260 - origin.x,
-                    y: anchorFrame.maxY - origin.y + 8
-                )
             }
+            .frame(width: 260)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.gray.opacity(0.18), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.15), radius: 18, y: 8)
+            .offset(x: frame.maxX - 260, y: frame.maxY + 8)
         }
-        .ignoresSafeArea()
     }
 }
 
