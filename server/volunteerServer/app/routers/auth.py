@@ -79,7 +79,6 @@ def register(
 
 @router.post("/send-verification-code")
 def send_verification_code_endpoint(
-    request: Request,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     background_tasks: BackgroundTasks,
