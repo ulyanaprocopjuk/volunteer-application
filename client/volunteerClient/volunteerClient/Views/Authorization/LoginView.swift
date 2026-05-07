@@ -74,7 +74,10 @@ struct LoginView: View {
                 }
                 .padding(.top, Constants.fieldsTopPadding)
 
-                rememberMeToggle
+//                rememberMeToggle
+//                    .padding(.top, 16)
+
+                forgotPasswordLink
                     .padding(.top, 16)
 
                 loginButton
@@ -112,22 +115,35 @@ struct LoginView: View {
         .padding(.top, Constants.headerTopPadding)
     }
 
-    private var rememberMeToggle: some View {
-        Button {
-            vm.rememberMe.toggle()
+//    private var rememberMeToggle: some View {
+//        Button {
+//            vm.rememberMe.toggle()
+//        } label: {
+//            HStack(spacing: 10) {
+//                Image(systemName: vm.rememberMe ? "checkmark.square.fill" : "square")
+//                    .font(.system(size: 20, weight: .semibold))
+//                    .foregroundStyle(.black)
+//
+//                Text("Запомнить меня")
+//                    .foregroundStyle(.black)
+//
+//                Spacer()
+//            }
+//        }
+//        .buttonStyle(.plain)
+//    }
+
+    private var forgotPasswordLink: some View {
+        NavigationLink {
+            ForgotPasswordView()
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: vm.rememberMe ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.black)
-
-                Text("Запомнить меня")
-                    .foregroundStyle(.black)
-
-                Spacer()
-            }
+            Text("Забыли пароль?")
+                .font(.custom("NotoSans-Medium", size: 15))
+                .underline()
+                .foregroundStyle(.black.opacity(0.9))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var loginButton: some View {

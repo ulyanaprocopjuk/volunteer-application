@@ -6,11 +6,13 @@ final class AppSession: ObservableObject {
     enum Flow {
         case loading
         case auth
+        case emailVerification
         case profileSetup
         case main
     }
 
     enum PostAuthDestination {
+        case emailVerification
         case profileSetup
         case main
     }
@@ -19,6 +21,7 @@ final class AppSession: ObservableObject {
     @Published private(set) var token: String?
     @Published private(set) var currentUser: UserResponse?
     @Published var globalError: String?
+    @Published var pendingPasswordResetToken: String?
 
     private let authAPI: AuthAPIProtocol
     private let keychain: KeychainStorage
@@ -92,6 +95,8 @@ final class AppSession: ObservableObject {
         self.globalError = nil
 
         switch destination {
+        case .emailVerification:
+            flow = .emailVerification
         case .profileSetup:
             flow = .profileSetup
         case .main:
@@ -141,6 +146,10 @@ final class AppSession: ObservableObject {
 
             return try await operation(refreshedToken)
         }
+    }
+
+    func completeEmailVerification() {
+        flow = .profileSetup
     }
 
     func completeProfileSetup() {

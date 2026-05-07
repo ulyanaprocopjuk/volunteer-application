@@ -127,14 +127,6 @@ struct ProfileEditView: View {
                 error: viewModel.volunteerPhoneError,
                 onSelectCountry: { viewModel.selectVolunteerPhoneCountry($0) }
             )
-            LabeledInputField(
-                title: "Электронная почта",
-                text: $viewModel.volunteerEmail,
-                placeholder: "Введите электронную почту",
-                keyboardType: .emailAddress,
-                autocapitalization: .never,
-                error: viewModel.volunteerEmailError
-            )
             LabeledLocationField(
                 title: "Местонахождение",
                 country: Binding(
@@ -180,14 +172,6 @@ struct ProfileEditView: View {
                 countries: viewModel.phoneCountries,
                 error: viewModel.organizationPhoneError,
                 onSelectCountry: { viewModel.selectOrganizationPhoneCountry($0) }
-            )
-            LabeledInputField(
-                title: "Электронная почта",
-                text: $viewModel.organizationEmail,
-                placeholder: "Введите электронную почту",
-                keyboardType: .emailAddress,
-                autocapitalization: .never,
-                error: viewModel.organizationEmailError
             )
             LabeledLocationField(
                 title: "Местонахождение",

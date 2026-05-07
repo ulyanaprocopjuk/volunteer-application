@@ -69,3 +69,15 @@ def hash_refresh_token(token: str) -> str:
 
 def refresh_token_expires_at() -> datetime:
     return datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+
+def generate_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def generate_reset_token() -> str:
+    return secrets.token_urlsafe(48)

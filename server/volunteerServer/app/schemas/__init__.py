@@ -1,4 +1,13 @@
-from .auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
+from .auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    SendVerificationCodeRequest,
+    TokenResponse,
+    VerifyEmailRequest,
+)
 from .events import (
     CancelEventRequest,
     CreateEventRequest,
@@ -17,6 +26,10 @@ __all__ = [
     "LoginRequest",
     "RefreshRequest",
     "TokenResponse",
+    "SendVerificationCodeRequest",
+    "VerifyEmailRequest",
+    "ForgotPasswordRequest",
+    "ResetPasswordRequest",
     "UserResponse",
     "ProfileUpsertRequest",
     "ProfileResponse",

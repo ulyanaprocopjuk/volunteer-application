@@ -10,7 +10,7 @@ class ProfileUpsertRequest(BaseModel):
     last_name: str | None = Field(default=None, max_length=100)
     organization_name: str | None = Field(default=None, max_length=255)
     phone: str = Field(min_length=3, max_length=50)
-    email: EmailStr
+    email: EmailStr | None = None
     city: str = Field(min_length=1, max_length=100)
     country: str = Field(min_length=1, max_length=100)
     skills: list[str] | None = None
@@ -31,6 +31,7 @@ class ProfileUpsertRequest(BaseModel):
         "city",
         "country",
         "about",
+        "email",
     )
     @classmethod
     def strip_strings(cls, value: str | None) -> str | None:
@@ -41,7 +42,9 @@ class ProfileUpsertRequest(BaseModel):
 
     @field_validator("email", mode="after")
     @classmethod
-    def normalize_email(cls, value: EmailStr) -> str:
+    def normalize_email(cls, value: EmailStr | None) -> str | None:
+        if value is None:
+            return None
         return str(value).lower()
 
     @model_validator(mode="after")
@@ -74,7 +77,7 @@ class ProfileResponse(BaseModel):
     last_name: str | None
     organization_name: str | None
     phone: str
-    email: EmailStr
+    email: str | None
     city: str
     country: str
     skills: list[str]

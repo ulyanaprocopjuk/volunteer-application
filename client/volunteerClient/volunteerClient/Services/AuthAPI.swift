@@ -1,12 +1,16 @@
 import Foundation
 
 protocol AuthAPIProtocol {
-    func register(username: String, password: String) async throws -> UserResponse
+    func register(username: String, email: String, password: String) async throws -> UserResponse
     func login(username: String, password: String) async throws -> TokenResponse
     func refresh(refreshToken: String) async throws -> TokenResponse
     func logout(refreshToken: String) async throws
     func getCurrentUser(token: String) async throws -> UserResponse
     func getAllUsersForAdmin(token: String) async throws -> [UserResponse]
+    func sendVerificationCode(token: String) async throws
+    func verifyEmail(code: String, token: String) async throws
+    func forgotPassword(email: String) async throws
+    func resetPassword(token: String, newPassword: String) async throws
 }
 
 enum AppNetworkError: LocalizedError {
@@ -46,14 +50,57 @@ final class AuthAPI: AuthAPIProtocol {
         self.session = session
     }
 
-    func register(username: String, password: String) async throws -> UserResponse {
-        let body = RegisterRequest(username: username, password: password)
+    func register(username: String, email: String, password: String) async throws -> UserResponse {
+        let body = RegisterRequest(username: username, email: email, password: password)
         return try await performRequest(
             path: "/auth/register",
             method: "POST",
             body: encoder.encode(body),
             token: nil,
             responseType: UserResponse.self
+        )
+    }
+
+    func sendVerificationCode(token: String) async throws {
+        _ = try await performRequest(
+            path: "/auth/send-verification-code",
+            method: "POST",
+            body: encoder.encode(SendVerificationCodeRequest()),
+            token: token,
+            responseType: EmptyResponse.self
+        )
+    }
+
+    func verifyEmail(code: String, token: String) async throws {
+        let body = VerifyEmailRequest(code: code)
+        _ = try await performRequest(
+            path: "/auth/verify-email",
+            method: "POST",
+            body: encoder.encode(body),
+            token: token,
+            responseType: EmptyResponse.self
+        )
+    }
+
+    func forgotPassword(email: String) async throws {
+        let body = ForgotPasswordRequest(email: email)
+        _ = try await performRequest(
+            path: "/auth/forgot-password",
+            method: "POST",
+            body: encoder.encode(body),
+            token: nil,
+            responseType: EmptyResponse.self
+        )
+    }
+
+    func resetPassword(token: String, newPassword: String) async throws {
+        let body = ResetPasswordRequest(token: token, newPassword: newPassword)
+        _ = try await performRequest(
+            path: "/auth/reset-password",
+            method: "POST",
+            body: encoder.encode(body),
+            token: nil,
+            responseType: EmptyResponse.self
         )
     }
 

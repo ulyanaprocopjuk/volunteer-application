@@ -7,7 +7,28 @@ enum UserRole: String, Decodable {
 
 struct RegisterRequest: Encodable {
     let username: String
+    let email: String
     let password: String
+}
+
+struct SendVerificationCodeRequest: Encodable {}
+
+struct VerifyEmailRequest: Encodable {
+    let code: String
+}
+
+struct ForgotPasswordRequest: Encodable {
+    let email: String
+}
+
+struct ResetPasswordRequest: Encodable {
+    let token: String
+    let newPassword: String
+
+    enum CodingKeys: String, CodingKey {
+        case token
+        case newPassword = "new_password"
+    }
 }
 
 struct LoginRequest: Encodable {
@@ -40,12 +61,16 @@ struct TokenResponse: Decodable {
 struct UserResponse: Decodable, Identifiable {
     let id: Int
     let username: String
+    let email: String?
+    let emailVerified: Bool
     let role: UserRole
     let isActive: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
         case username
+        case email
+        case emailVerified = "email_verified"
         case role
         case isActive = "is_active"
     }

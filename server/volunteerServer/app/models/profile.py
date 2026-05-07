@@ -41,7 +41,7 @@ class Profile(Base):
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     organization_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str] = mapped_column(String(50), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     country: Mapped[str] = mapped_column(String(100), nullable=False)
     about: Mapped[str | None] = mapped_column(Text, nullable=True)

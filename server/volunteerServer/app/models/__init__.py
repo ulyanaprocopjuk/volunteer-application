@@ -1,9 +1,11 @@
 from .associations import events_direction, volunteer_skills
 from .direction import Direction
+from .email_verification_code import EmailVerificationCode
 from .event import Event
 from .event_application import EventApplication, EventApplicationStatus
 from .event_admin_message import EventAdminMessage
 from .notification import Notification
+from .password_reset_token import PasswordResetToken
 from .profile import Profile, ProfileType
 from .refresh_token import RefreshToken
 from .skill import Skill
@@ -24,4 +26,6 @@ __all__ = [
     "EventApplicationStatus",
     "EventAdminMessage",
     "Notification",
+    "EmailVerificationCode",
+    "PasswordResetToken",
 ]

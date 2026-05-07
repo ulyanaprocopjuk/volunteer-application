@@ -8,5 +8,7 @@ class UserResponse(BaseModel):
 
     id: int
     username: str
+    email: str | None
+    email_verified: bool
     role: UserRole
     is_active: bool

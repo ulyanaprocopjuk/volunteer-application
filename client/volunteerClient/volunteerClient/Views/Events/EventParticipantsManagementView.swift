@@ -609,7 +609,6 @@ private struct ParticipantProfileDetailsView: View {
             ReadOnlyField(title: "Имя", value: profile.firstName ?? "")
             ReadOnlyField(title: "Фамилия", value: profile.lastName ?? "")
             ReadOnlyField(title: "Номер телефона", value: profile.phone ?? "")
-            ReadOnlyField(title: "Электронная почта", value: profile.email ?? "")
             ReadOnlyField(title: "Местонахождение", value: profile.locationText)
             ReadOnlySkillsField(title: "Навыки", values: profile.skills ?? [])
             ReadOnlyMultilineField(title: "Обо мне", value: profile.about ?? "")
@@ -620,7 +619,6 @@ private struct ParticipantProfileDetailsView: View {
         VStack(alignment: .leading, spacing: 22) {
             ReadOnlyField(title: "Название организации", value: profile.organizationName ?? "")
             ReadOnlyField(title: "Телефон", value: profile.phone ?? "")
-            ReadOnlyField(title: "Электронная почта", value: profile.email ?? "")
             ReadOnlyField(title: "Местонахождение", value: profile.locationText)
             ReadOnlyMultilineField(title: "О нас", value: profile.about ?? "")
         }

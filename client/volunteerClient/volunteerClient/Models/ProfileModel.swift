@@ -40,7 +40,7 @@ struct ProfileUpsertRequest: Encodable {
     let lastName: String?
     let organizationName: String?
     let phone: String
-    let email: String
+    let email: String?
     let city: String
     let country: String
     let skills: [String]?

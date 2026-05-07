@@ -12,12 +12,29 @@ struct RootView: View {
                 NavigationStack {
                     LoginView(session: session)
                 }
+            case .emailVerification:
+                NavigationStack {
+                    EmailVerificationView(session: session)
+                }
             case .profileSetup:
                 NavigationStack {
                     ProfileSetupScreen(session: session)
                 }
             case .main:
                 HomePageView(session: session)
+            }
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { session.pendingPasswordResetToken != nil },
+                set: { if !$0 { session.pendingPasswordResetToken = nil } }
+            )
+        ) {
+            if let token = session.pendingPasswordResetToken {
+                NavigationStack {
+                    NewPasswordView(resetToken: token)
+                        .environmentObject(session)
+                }
             }
         }
     }

@@ -183,20 +183,16 @@ final class ProfileSetupViewModel: ObservableObject {
             return !trim(firstName).isEmpty &&
                 !trim(lastName).isEmpty &&
                 !trim(volunteerPhone).isEmpty &&
-                !trim(volunteerEmail).isEmpty &&
                 !trim(selectedVolunteerCountry).isEmpty &&
                 !trim(volunteerCity).isEmpty &&
                 volunteerPhoneError == nil &&
-                volunteerEmailError == nil &&
                 volunteerLocationError == nil
         } else {
             return !trim(organizationName).isEmpty &&
                 !trim(organizationPhone).isEmpty &&
-                !trim(organizationEmail).isEmpty &&
                 !trim(selectedOrganizationCountry).isEmpty &&
                 !trim(organizationCity).isEmpty &&
                 organizationPhoneError == nil &&
-                organizationEmailError == nil &&
                 organizationLocationError == nil
         }
     }
@@ -402,7 +398,7 @@ final class ProfileSetupViewModel: ObservableObject {
                 lastName: trim(lastName),
                 organizationName: nil,
                 phone: phone,
-                email: trim(volunteerEmail).lowercased(),
+                email: nil,
                 city: location.city,
                 country: location.country,
                 skills: skills.filter { selectedSkills.contains($0) },
@@ -423,7 +419,7 @@ final class ProfileSetupViewModel: ObservableObject {
                 lastName: nil,
                 organizationName: trim(organizationName),
                 phone: phone,
-                email: trim(organizationEmail).lowercased(),
+                email: nil,
                 city: location.city,
                 country: location.country,
                 skills: nil,

@@ -26,7 +26,8 @@ def upsert_profile(
     profile.type = payload.type
     profile.avatar_url = payload.avatar_url
     profile.phone = payload.phone
-    profile.email = str(payload.email)
+    if payload.email is not None:
+        profile.email = str(payload.email)
     profile.city = payload.city
     profile.country = payload.country
     profile.about = payload.about

@@ -48,6 +48,8 @@ def ensure_database_schema(engine: Engine) -> None:
     _seed_lookup_table(engine, table_names, "directions", DIRECTION_NAMES)
     _seed_lookup_table(engine, table_names, "skills", SKILL_NAMES)
     _remove_legacy_profile_skills_column(engine, inspector, table_names)
+    _ensure_user_email_columns(engine, inspector, table_names)
+    _make_profile_email_nullable(engine, inspector, table_names)
 
     if "notifications" in table_names:
         _ensure_notification_reference_columns(engine, inspector)
@@ -203,6 +205,45 @@ def _backfill_volunteer_skills(engine: Engine, table_names: list[str]) -> None:
                 ),
                 new_pairs,
             )
+
+
+def _ensure_user_email_columns(engine: Engine, inspector, table_names: list[str]) -> None:
+    if "users" not in table_names:
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    statements: list[str] = []
+    dialect = engine.dialect.name
+
+    if "email" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL")
+    if "email_verified" not in columns:
+        bool_type = "BOOLEAN" if dialect == "postgresql" else "INTEGER"
+        statements.append(f"ALTER TABLE users ADD COLUMN email_verified {bool_type} NOT NULL DEFAULT FALSE")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def _make_profile_email_nullable(engine: Engine, inspector, table_names: list[str]) -> None:
+    if "profiles" not in table_names:
+        return
+
+    dialect = engine.dialect.name
+    if dialect != "postgresql":
+        return
+
+    columns = {col["name"]: col for col in inspector.get_columns("profiles")}
+    email_col = columns.get("email")
+    if email_col is None or email_col.get("nullable", True):
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE profiles ALTER COLUMN email DROP NOT NULL"))
 
 
 def _parse_legacy_skills(value) -> list[str]:

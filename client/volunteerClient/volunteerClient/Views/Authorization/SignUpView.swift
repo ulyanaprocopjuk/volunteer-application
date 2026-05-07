@@ -2,7 +2,7 @@ import SwiftUI
 
 private enum Constants {
     static let horizontalPadding: CGFloat = 35
-    static let headerTopPadding: CGFloat = 160
+    static let headerTopPadding: CGFloat = 130
     static let fieldsTopPadding: CGFloat = 20
     static let buttonTopPadding: CGFloat = 20
     static let bottomButtonTopPadding: CGFloat = 12
@@ -24,6 +24,7 @@ struct SignUpView: View {
 
     private enum Field: Hashable {
         case username
+        case email
         case password
         case confirmPassword
     }
@@ -48,7 +49,29 @@ struct SignUpView: View {
                         autocapitalization: .never,
                         submitLabel: .next
                     ) {
-                        focusedField = .password
+                        focusedField = .email
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        SignUpTextField(
+                            placeholder: "Email / Введите почту",
+                            text: $vm.email,
+                            focus: $focusedField,
+                            field: .email,
+                            keyboard: .emailAddress,
+                            contentType: .emailAddress,
+                            autocapitalization: .never,
+                            submitLabel: .next
+                        ) {
+                            focusedField = .password
+                        }
+
+                        if let emailErr = vm.emailError {
+                            Text(emailErr)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(.horizontal, 4)
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -129,7 +152,9 @@ struct SignUpView: View {
             vm.username = newValue.replacingOccurrences(of: " ", with: "")
             vm.clearServerError()
         }
-        
+        .onChange(of: vm.email) { _, _ in
+            vm.clearServerError()
+        }
         .onChange(of: vm.password) { _, _ in
             vm.clearServerError()
         }

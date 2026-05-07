@@ -260,7 +260,6 @@ struct ProfileView: View {
             ReadOnlyField(title: "Имя", value: model.firstName)
             ReadOnlyField(title: "Фамилия", value: model.lastName)
             ReadOnlyField(title: "Номер телефона", value: model.volunteerPhone)
-            ReadOnlyField(title: "Электронная почта", value: model.volunteerEmail)
             ReadOnlyField(title: "Местонахождение", value: model.volunteerLocation)
             ReadOnlySkillsField(title: "Навыки", values: Array(model.selectedSkills))
             ReadOnlyMultilineField(title: "Обо мне", value: model.aboutMe)
@@ -271,7 +270,6 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 22) {
             ReadOnlyField(title: "Название организации", value: model.organizationName)
             ReadOnlyField(title: "Телефон", value: model.organizationPhone)
-            ReadOnlyField(title: "Электронная почта", value: model.organizationEmail)
             ReadOnlyField(title: "Местонахождение", value: model.organizationLocation)
             ReadOnlyMultilineField(title: "О нас", value: model.aboutOrganization)
         }
