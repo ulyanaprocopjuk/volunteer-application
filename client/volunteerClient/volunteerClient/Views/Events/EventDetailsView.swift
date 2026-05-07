@@ -117,7 +117,8 @@ struct EventDetailsView: View {
             if let session {
                 EventAttendanceConfirmationView(
                     eventID: event.id,
-                    session: session
+                    session: session,
+                    isRestoring: isInAttendancePhase
                 ) { updatedEvent in
                     currentEvent = updatedEvent
                     showMessage(updatedEvent.message ?? "Событие началось")
@@ -232,7 +233,7 @@ struct EventDetailsView: View {
                     .padding(.top, 22)
             }
 
-            if event.isCreator == true, isAlmostStarting, session != nil {
+            if event.isCreator == true, (isAlmostStarting || isInAttendancePhase), session != nil {
                 organizerStartRow
                     .padding(.top, 22)
             }
@@ -407,7 +408,7 @@ struct EventDetailsView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                    Text("Начать")
+                    Text(isInAttendancePhase ? "Продолжить отметку" : "Начать")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                 }
@@ -442,6 +443,10 @@ struct EventDetailsView: View {
 
     private var isAlmostStarting: Bool {
         Date() >= startDate.addingTimeInterval(-30 * 60)
+    }
+
+    private var isInAttendancePhase: Bool {
+        event.status?.lowercased() == "attendance"
     }
 
     private var participationButtonBackground: Color {

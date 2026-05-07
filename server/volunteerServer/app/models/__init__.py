@@ -3,6 +3,7 @@ from .direction import Direction
 from .email_verification_code import EmailVerificationCode
 from .event import Event
 from .event_application import EventApplication, EventApplicationStatus
+from .event_attendance import EventAttendance
 from .event_admin_message import EventAdminMessage
 from .notification import Notification
 from .password_reset_token import PasswordResetToken
@@ -24,6 +25,7 @@ __all__ = [
     "Event",
     "EventApplication",
     "EventApplicationStatus",
+    "EventAttendance",
     "EventAdminMessage",
     "Notification",
     "EmailVerificationCode",

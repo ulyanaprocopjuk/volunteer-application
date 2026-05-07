@@ -16,6 +16,8 @@ protocol EventAPIProtocol {
     func removeParticipant(applicationID: Int, reason: String, token: String) async throws -> EventResponse
     func fetchEventFeed(searchText: String?, token: String?) async throws -> [EventResponse]
     func fetchEventFeed(searchText: String?, filters: EventFeedFilters, token: String?) async throws -> [EventResponse]
+    func fetchAttendance(eventID: String, token: String) async throws -> [AttendanceItem]
+    func confirmAttendance(eventID: String, presentApplicationIDs: [Int], token: String) async throws -> EventResponse
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -231,6 +233,28 @@ final class EventAPI: EventAPIProtocol {
         let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode([EventResponse].self, from: data)
+    }
+
+    func fetchAttendance(eventID: String, token: String) async throws -> [AttendanceItem] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/attendance"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([AttendanceItem].self, from: data)
+    }
+
+    func confirmAttendance(eventID: String, presentApplicationIDs: [Int], token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/attendance/confirm"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(ConfirmAttendanceRequest(presentApplicationIDs: presentApplicationIDs))
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
     }
 
     private func validate(response: URLResponse, data: Data) throws {

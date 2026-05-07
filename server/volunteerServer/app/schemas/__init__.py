@@ -9,7 +9,9 @@ from .auth import (
     VerifyEmailRequest,
 )
 from .events import (
+    AttendanceItemResponse,
     CancelEventRequest,
+    ConfirmAttendanceRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
     EventParticipantResponse,
@@ -33,6 +35,8 @@ __all__ = [
     "UserResponse",
     "ProfileUpsertRequest",
     "ProfileResponse",
+    "AttendanceItemResponse",
+    "ConfirmAttendanceRequest",
     "CreateEventRequest",
     "EventResponse",
     "EventParticipantResponse",

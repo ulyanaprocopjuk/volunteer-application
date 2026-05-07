@@ -74,7 +74,8 @@ class EventResponse(BaseModel):
         return {
             "pending": "Ожидает подтверждения",
             "approved": "Подтверждено",
-            "active": "Подтверждено",
+            "active": "Активно",
+            "attendance": "attendance",
             "rejected": "Отклонено",
             "cancelled": "Отменено",
             "completed": "Завершено",
@@ -114,6 +115,20 @@ class CancelEventRequest(BaseModel):
         if not value:
             raise ValueError("reason is required")
         return value
+
+
+class AttendanceItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    application_id: int = Field(alias="application_id")
+    is_present: bool = Field(alias="is_present")
+    profile: ProfileResponse
+
+
+class ConfirmAttendanceRequest(BaseModel):
+    present_application_ids: list[int] = Field(alias="presentApplicationIDs")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class CurrentCountryEventResponse(BaseModel):

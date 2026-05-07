@@ -175,6 +175,24 @@ enum EventApplicationDisplayStatus: String {
     }
 }
 
+struct AttendanceItem: Decodable, Identifiable {
+    let applicationID: Int
+    let isPresent: Bool
+    let profile: ProfileResponse
+
+    var id: Int { applicationID }
+
+    enum CodingKeys: String, CodingKey {
+        case applicationID = "application_id"
+        case isPresent = "is_present"
+        case profile
+    }
+}
+
+struct ConfirmAttendanceRequest: Encodable {
+    let presentApplicationIDs: [Int]
+}
+
 struct RemoveEventParticipantRequest: Encodable {
     let reason: String
 }
@@ -284,6 +302,7 @@ enum EventModerationStatus {
             || value.contains("confirmed")
             || value.contains("accept")
             || value.contains("active")
+            || value.contains("attendance")
             || value.contains("актив")
             || value.contains("published")
             || value.contains("подтверж") {

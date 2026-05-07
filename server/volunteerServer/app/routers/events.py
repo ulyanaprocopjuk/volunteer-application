@@ -7,7 +7,9 @@ from app.api.deps import get_current_user, get_optional_user
 from app.db import get_db
 from app.models import User
 from app.schemas import (
+    AttendanceItemResponse,
     CancelEventRequest,
+    ConfirmAttendanceRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
     EventParticipantResponse,
@@ -55,6 +57,25 @@ def start_event(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     return event_service.start_event(db, event_id, current_user)
+
+
+@router.get("/{event_id}/attendance", response_model=list[AttendanceItemResponse])
+def get_attendance(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.get_attendance(db, event_id, current_user)
+
+
+@router.post("/{event_id}/attendance/confirm", response_model=EventResponse)
+def confirm_attendance(
+    event_id: str,
+    payload: ConfirmAttendanceRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.confirm_attendance(db, event_id, current_user, payload.present_application_ids)
 
 
 @router.delete("/{event_id}/applications", response_model=EventResponse)

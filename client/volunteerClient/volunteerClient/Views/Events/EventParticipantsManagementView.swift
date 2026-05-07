@@ -725,39 +725,38 @@ struct EventAttendanceConfirmationView: View {
     private let eventID: String
     private let session: AppSession
     private let api: EventAPIProtocol
+    private let isRestoring: Bool
     private let onConfirmed: ((EventResponse) -> Void)?
 
-    @State private var participants: [EventParticipantResponse] = []
+    @State private var attendanceItems: [AttendanceItem] = []
     @State private var presentIDs: Set<Int> = []
     @State private var isLoading = false
-    @State private var isStarting = false
+    @State private var isConfirming = false
     @State private var errorMessage: String?
 
     init(
         eventID: String,
         session: AppSession,
         api: EventAPIProtocol? = nil,
+        isRestoring: Bool = false,
         onConfirmed: ((EventResponse) -> Void)? = nil
     ) {
         self.eventID = eventID
         self.session = session
         self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.isRestoring = isRestoring
         self.onConfirmed = onConfirmed
-    }
-
-    private var acceptedParticipants: [EventParticipantResponse] {
-        participants.filter { $0.applicationStatus == .accepted && !$0.isCreator }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             attendanceHeader
 
-            if isLoading && participants.isEmpty {
+            if isLoading && attendanceItems.isEmpty {
                 Spacer()
                 ProgressView()
                 Spacer()
-            } else if acceptedParticipants.isEmpty {
+            } else if attendanceItems.isEmpty {
                 Spacer()
                 Text("Подтверждённых участников нет")
                     .font(.system(size: 17, weight: .regular, design: .serif))
@@ -766,8 +765,8 @@ struct EventAttendanceConfirmationView: View {
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 12) {
-                        ForEach(acceptedParticipants) { participant in
-                            attendanceRow(participant)
+                        ForEach(attendanceItems) { item in
+                            attendanceRow(item)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -784,7 +783,7 @@ struct EventAttendanceConfirmationView: View {
                 .padding(.vertical, 14)
                 .background(.background)
         }
-        .task { await loadParticipants() }
+        .task { await loadData() }
         .alert("Ошибка", isPresented: Binding(
             get: { errorMessage != nil },
             set: { _ in errorMessage = nil }
@@ -827,13 +826,13 @@ struct EventAttendanceConfirmationView: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
-    private func attendanceRow(_ participant: EventParticipantResponse) -> some View {
-        let isPresent = presentIDs.contains(participant.id)
+    private func attendanceRow(_ item: AttendanceItem) -> some View {
+        let isPresent = presentIDs.contains(item.applicationID)
 
         return HStack(spacing: 14) {
-            ParticipantAvatarView(avatarURL: participant.profile.avatarURL, size: 52)
+            ParticipantAvatarView(avatarURL: item.profile.avatarURL, size: 52)
 
-            Text(participant.profile.displayName)
+            Text(item.profile.displayName)
                 .font(.system(size: 16, weight: .semibold, design: .serif))
                 .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                 .lineLimit(2)
@@ -842,9 +841,9 @@ struct EventAttendanceConfirmationView: View {
             AttendanceToggle(isOn: isPresent) {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if isPresent {
-                        presentIDs.remove(participant.id)
+                        presentIDs.remove(item.applicationID)
                     } else {
-                        presentIDs.insert(participant.id)
+                        presentIDs.insert(item.applicationID)
                     }
                 }
             }
@@ -856,14 +855,14 @@ struct EventAttendanceConfirmationView: View {
 
     private var confirmButton: some View {
         Button {
-            Task { await confirmAndStart() }
+            Task { await confirmAttendance() }
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
                     .frame(height: 54)
 
-                if isStarting {
+                if isConfirming {
                     ProgressView().tint(.white)
                 } else {
                     Text("Подтвердить")
@@ -873,30 +872,42 @@ struct EventAttendanceConfirmationView: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(isStarting || isLoading)
-        .opacity((isStarting || isLoading) ? 0.6 : 1)
+        .disabled(isConfirming || isLoading)
+        .opacity((isConfirming || isLoading) ? 0.6 : 1)
     }
 
-    private func loadParticipants() async {
+    private func loadData() async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            participants = try await session.performAuthorizedRequest { token in
-                try await api.fetchEventApplications(eventID: eventID, token: token)
+            if !isRestoring {
+                _ = try await session.performAuthorizedRequest { token in
+                    try await api.startEvent(id: eventID, token: token)
+                }
             }
+
+            let items = try await session.performAuthorizedRequest { token in
+                try await api.fetchAttendance(eventID: eventID, token: token)
+            }
+            attendanceItems = items
+            presentIDs = Set(items.filter { $0.isPresent }.map { $0.applicationID })
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func confirmAndStart() async {
-        isStarting = true
-        defer { isStarting = false }
+    private func confirmAttendance() async {
+        isConfirming = true
+        defer { isConfirming = false }
 
         do {
             let updatedEvent = try await session.performAuthorizedRequest { token in
-                try await api.startEvent(id: eventID, token: token)
+                try await api.confirmAttendance(
+                    eventID: eventID,
+                    presentApplicationIDs: Array(presentIDs),
+                    token: token
+                )
             }
             onConfirmed?(updatedEvent)
             dismiss()
@@ -910,9 +921,9 @@ private struct AttendanceToggle: View {
     let isOn: Bool
     let onToggle: () -> Void
 
-    private let trackWidth: CGFloat = 56
-    private let trackHeight: CGFloat = 32
-    private let thumbDiameter: CGFloat = 26
+    private let trackWidth: CGFloat = 48
+    private let trackHeight: CGFloat = 28
+    private let thumbDiameter: CGFloat = 22
     private let thumbInset: CGFloat = 3
 
     var body: some View {
@@ -920,14 +931,14 @@ private struct AttendanceToggle: View {
             ZStack {
                 RoundedRectangle(cornerRadius: trackHeight / 2, style: .continuous)
                     .fill(isOn
-                        ? Color(red: 0.20, green: 0.72, blue: 0.35)
-                        : Color(red: 0.85, green: 0.20, blue: 0.20))
+                        ? Color(red: 0.30, green: 0.62, blue: 0.42)
+                        : Color(red: 0.72, green: 0.30, blue: 0.30))
                     .frame(width: trackWidth, height: trackHeight)
 
                 Circle()
                     .fill(Color.white)
                     .frame(width: thumbDiameter, height: thumbDiameter)
-                    .shadow(color: .black.opacity(0.20), radius: 3, y: 1)
+                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                     .offset(x: isOn
                         ? trackWidth / 2 - thumbDiameter / 2 - thumbInset
                         : -(trackWidth / 2 - thumbDiameter / 2 - thumbInset))

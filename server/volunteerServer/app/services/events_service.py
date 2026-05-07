@@ -6,8 +6,10 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import and_, false, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Direction, Event, EventApplication, EventApplicationStatus, Profile, ProfileType, User
+from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, Profile, ProfileType, User
 from app.schemas import (
+    AttendanceItemResponse,
+    ConfirmAttendanceRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
     EventParticipantResponse,
@@ -345,7 +347,7 @@ class EventService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can cancel event")
 
         normalized_status = (event.status or "").strip().lower()
-        if normalized_status not in ("pending", "approved", "active"):
+        if normalized_status not in ("pending", "approved", "active", "attendance"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event cannot be cancelled")
 
         normalized_reason = reason.strip()
@@ -396,6 +398,88 @@ class EventService:
         normalized_status = (event.status or "").strip().lower()
         if normalized_status not in ("approved", "active"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event cannot be started")
+
+        creator_profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
+        accepted_applications = db.scalars(
+            select(EventApplication).where(
+                EventApplication.event_id == event_id,
+                EventApplication.status == EventApplicationStatus.accepted,
+                EventApplication.volunteer_id != (creator_profile.id if creator_profile else -1),
+            )
+        ).all()
+
+        event.status = "attendance"
+        db.flush()
+
+        existing_attendance_ids = {
+            row[0]
+            for row in db.execute(
+                select(EventAttendance.application_id).where(EventAttendance.event_id == event_id)
+            )
+        }
+        for application in accepted_applications:
+            if application.id not in existing_attendance_ids:
+                db.add(EventAttendance(event_id=event_id, application_id=application.id, is_present=False))
+
+        db.commit()
+        db.refresh(event)
+
+        response = self._response(db, event, user)
+        response.message = "Отметьте присутствующих"
+        return response
+
+    def get_attendance(self, db: Session, event_id: str, user: User) -> list[AttendanceItemResponse]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can view attendance")
+
+        normalized_status = (event.status or "").strip().lower()
+        if normalized_status != "attendance":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in attendance phase")
+
+        attendance_records = db.scalars(
+            select(EventAttendance).where(EventAttendance.event_id == event_id)
+        ).all()
+
+        return [
+            AttendanceItemResponse(
+                application_id=record.application_id,
+                is_present=record.is_present,
+                profile=record.application.volunteer,
+            )
+            for record in attendance_records
+        ]
+
+    def confirm_attendance(
+        self,
+        db: Session,
+        event_id: str,
+        user: User,
+        present_application_ids: list[int],
+    ) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can confirm attendance")
+
+        normalized_status = (event.status or "").strip().lower()
+        if normalized_status != "attendance":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in attendance phase")
+
+        present_set = set(present_application_ids)
+        attendance_records = db.scalars(
+            select(EventAttendance).where(EventAttendance.event_id == event_id)
+        ).all()
+
+        now = datetime.now(UTC)
+        for record in attendance_records:
+            record.is_present = record.application_id in present_set
+            record.checked_at = now
 
         event.status = "active"
         db.commit()
@@ -673,7 +757,7 @@ class EventService:
         result = db.execute(
             update(Event)
             .where(
-                func.lower(Event.status).in_(("approved", "active")),
+                func.lower(Event.status).in_(("approved", "active", "attendance")),
                 event_end < comparison_time,
             )
             .values(
