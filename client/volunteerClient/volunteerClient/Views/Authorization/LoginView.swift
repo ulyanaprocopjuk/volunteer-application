@@ -52,24 +52,15 @@ struct LoginView: View {
                         focusedField = .password
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        LoginSecureField(
-                            placeholder: "Пароль",
-                            text: $vm.password,
-                            focus: $focusedField,
-                            field: .password,
-                            contentType: .password,
-                            submitLabel: .go
-                        ) {
-                            performLogin()
-                        }
-
-                        if let errorMessage = vm.errorMessage {
-                            Text(errorMessage)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .padding(.horizontal, 4)
-                        }
+                    LoginSecureField(
+                        placeholder: "Пароль",
+                        text: $vm.password,
+                        focus: $focusedField,
+                        field: .password,
+                        contentType: .password,
+                        submitLabel: .go
+                    ) {
+                        performLogin()
                     }
                 }
                 .padding(.top, Constants.fieldsTopPadding)
@@ -82,6 +73,14 @@ struct LoginView: View {
 
                 loginButton
                     .padding(.top, Constants.buttonTopPadding)
+
+                if let errorMessage = vm.errorMessage {
+                    Text(errorMessage)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.red)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 10)
+                }
 
                 bottomSignupRow
                     .padding(.top, Constants.bottomButtonTopPadding)

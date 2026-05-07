@@ -268,6 +268,7 @@ enum EventModerationStatus {
     case pending
     case approved
     case rejected
+    case cancelled
     case completed
 
     init(rawValue: String?) {
@@ -276,6 +277,9 @@ enum EventModerationStatus {
         if value.contains("completed")
             || value.contains("заверш") {
             self = .completed
+        } else if value.contains("cancel")
+            || value.contains("отмен") {
+            self = .cancelled
         } else if value.contains("approved")
             || value.contains("confirmed")
             || value.contains("accept")
@@ -287,7 +291,6 @@ enum EventModerationStatus {
         } else if value.contains("reject")
             || value.contains("declin")
             || value.contains("deny")
-            || value.contains("cancel")
             || value.contains("отклон") {
             self = .rejected
         } else if value.contains("pending")

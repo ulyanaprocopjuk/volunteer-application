@@ -81,6 +81,15 @@ struct LabeledPhoneField: View {
                     .textContentType(.telephoneNumber)
                     .font(.system(size: 15))
                     .foregroundColor(.black)
+                    .onChange(of: localNumber) { _, newValue in
+                        let digits = newValue.filter(\.isNumber)
+                        let maxLen = selectedCountry.localNumberLength
+                        if digits.count > maxLen {
+                            localNumber = String(digits.prefix(maxLen))
+                        } else if digits != newValue {
+                            localNumber = digits
+                        }
+                    }
             }
             .padding(.horizontal, 18)
             .frame(height: 58)

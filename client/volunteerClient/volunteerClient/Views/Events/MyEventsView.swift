@@ -3,6 +3,7 @@ import SwiftUI
 struct MyEventsView: View {
     @ObservedObject var viewModel: MyEventsViewModel
     let session: AppSession
+    var onEventCancelled: (() -> Void)? = nil
     let onCreateEvent: () -> Void
 
     @State private var selectedEvent: EventResponse?
@@ -58,7 +59,10 @@ struct MyEventsView: View {
             Text(viewModel.errorMessage ?? "")
         }
         .fullScreenCover(item: $selectedEvent) { event in
-            EventDetailsView(event: event, session: session)
+            EventDetailsView(event: event, session: session, onEventCancelled: {
+                selectedEvent = nil
+                onEventCancelled?()
+            })
         }
     }
 
@@ -100,6 +104,7 @@ struct MyEventsView: View {
             return viewModel.events.filter { event in
                 event.myEventsModerationStatus == .rejected
                     || event.myEventsModerationStatus == .completed
+                    || event.myEventsModerationStatus == .cancelled
                     || (event.myEventsModerationStatus == .approved && event.hasExpired)
             }
         }
@@ -340,7 +345,7 @@ struct MyEventCard: View {
     }
 
     private var statusText: String {
-        if event.hasExpired {
+        if event.hasExpired && moderationStatus != .cancelled {
             return "Завершено"
         }
 
@@ -351,13 +356,15 @@ struct MyEventCard: View {
             return "Активно"
         case .rejected:
             return "Отклонено"
+        case .cancelled:
+            return "Отменено"
         case .completed:
             return "Завершено"
         }
     }
 
     private var statusColor: Color {
-        if event.hasExpired {
+        if event.hasExpired && moderationStatus != .cancelled {
             return .black.opacity(0.45)
         }
 
@@ -368,6 +375,8 @@ struct MyEventCard: View {
             return Color(red: 0.16, green: 0.56, blue: 0.23)
         case .rejected:
             return Color(red: 0.80, green: 0.20, blue: 0.20)
+        case .cancelled:
+            return Color(red: 0.75, green: 0.38, blue: 0.10)
         case .completed:
             return .black.opacity(0.45)
         }
@@ -524,6 +533,7 @@ private struct MyEventsPreviewScreen: View {
             return events.filter { event in
                 event.myEventsModerationStatus == .rejected
                     || event.myEventsModerationStatus == .completed
+                    || event.myEventsModerationStatus == .cancelled
                     || (event.myEventsModerationStatus == .approved && event.hasExpired)
             }
         }

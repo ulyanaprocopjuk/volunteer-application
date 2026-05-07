@@ -12,6 +12,8 @@ struct EventFormView: View {
     @State private var isConfirmPresented = false
     @State private var activePicker: ActivePicker?
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showDirectionDropdown = false
+    @State private var directionButtonFrame: CGRect = .zero
 
     @State private var draftStartDate = Date()
     @State private var draftStartTime = Date()
@@ -66,7 +68,12 @@ struct EventFormView: View {
                             title: "Направление",
                             selectedValue: $viewModel.selectedDirection,
                             options: EventDirectionOption.allCases.map(\.rawValue),
-                            placeholder: "Выберите направление"
+                            placeholder: "Выберите направление",
+                            onTap: {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    showDirectionDropdown = true
+                                }
+                            }
                         )
 
                         EventLabeledMultilineField(
@@ -322,6 +329,25 @@ struct EventFormView: View {
         .task(id: selectedPhotoItem) {
             await loadPhoto()
         }
+        .onPreferenceChange(DirectionButtonFrameKey.self) { frame in
+            directionButtonFrame = frame
+        }
+        .overlay {
+            if showDirectionDropdown {
+                DirectionFloatingDropdown(
+                    options: EventDirectionOption.allCases.map(\.rawValue),
+                    selectedValue: $viewModel.selectedDirection,
+                    anchorFrame: directionButtonFrame,
+                    onDismiss: {
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            showDirectionDropdown = false
+                        }
+                    }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topTrailing)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: showDirectionDropdown)
     }
 
     @MainActor
@@ -474,35 +500,33 @@ private struct EventLabeledMultilineField: View {
     }
 }
 
+private struct DirectionButtonFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+}
+
 private struct EventDirectionDropdownField: View {
     let title: String
     @Binding var selectedValue: String
     let options: [String]
     let placeholder: String
-
-    @State private var isExpanded = false
+    let onTap: () -> Void
 
     private var trimmedValue: String {
         selectedValue.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 EventFieldTitle(title: title)
 
                 Spacer()
 
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isExpanded.toggle()
-                    }
-                } label: {
+                Button { onTap() } label: {
                     HStack(spacing: 6) {
                         Text(trimmedValue.isEmpty ? "Выбрать" : "Изменить")
-
                         Image(systemName: "chevron.down")
-                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
                     }
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
@@ -512,13 +536,12 @@ private struct EventDirectionDropdownField: View {
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-            }
-
-            if isExpanded {
-                directionDropdown
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                    .zIndex(1)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .preference(key: DirectionButtonFrameKey.self, value: geo.frame(in: .global))
+                    }
+                )
             }
 
             if trimmedValue.isEmpty {
@@ -527,56 +550,77 @@ private struct EventDirectionDropdownField: View {
                     .foregroundColor(.gray)
                     .padding(.leading, 8)
             } else {
-                ChipFlowLayout(spacing: 10) {
-                    SkillChip(title: trimmedValue)
-                }
+                Text(trimmedValue)
+                    .font(.system(size: 15))
+                    .foregroundColor(.black)
+                    .padding(.leading, 8)
             }
         }
     }
+}
 
-    private var directionDropdown: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(options, id: \.self) { option in
-                Button {
-                    selectedValue = option
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        isExpanded = false
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        Text(option)
-                            .font(.system(size: 15))
-                            .foregroundColor(.black)
-                            .multilineTextAlignment(.leading)
+private struct DirectionFloatingDropdown: View {
+    let options: [String]
+    @Binding var selectedValue: String
+    let anchorFrame: CGRect
+    let onDismiss: () -> Void
 
-                        Spacer(minLength: 12)
+    var body: some View {
+        GeometryReader { geo in
+            let origin = geo.frame(in: .global).origin
 
-                        if selectedValue == option {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture { onDismiss() }
+
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(options, id: \.self) { option in
+                        Button {
+                            selectedValue = option
+                            onDismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(option)
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.black)
+                                    .multilineTextAlignment(.leading)
+
+                                Spacer(minLength: 12)
+
+                                if selectedValue == option {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if option != options.last {
+                            Divider().padding(.leading, 14)
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 42)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-
-                if option != options.last {
-                    Divider()
-                        .padding(.leading, 14)
-                }
+                .frame(width: 260)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.gray.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.15), radius: 18, y: 8)
+                .offset(
+                    x: anchorFrame.maxX - 260 - origin.x,
+                    y: anchorFrame.maxY - origin.y + 8
+                )
             }
         }
-        .frame(width: 260)
-        .background(Color.white)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.gray.opacity(0.25), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+        .ignoresSafeArea()
     }
 }
 

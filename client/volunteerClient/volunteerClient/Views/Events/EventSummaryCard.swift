@@ -162,6 +162,8 @@ struct EventSummaryCard: View {
             return "Подтверждено"
         case .rejected:
             return "Отклонено"
+        case .cancelled:
+            return "Отменено"
         case .completed:
             return "Завершено"
         }
@@ -175,6 +177,8 @@ struct EventSummaryCard: View {
             return Color(red: 0.16, green: 0.56, blue: 0.23)
         case .rejected:
             return Color(red: 0.80, green: 0.20, blue: 0.20)
+        case .cancelled:
+            return .black.opacity(0.45)
         case .completed:
             return .black.opacity(0.45)
         }

@@ -126,9 +126,12 @@ struct HomePageView: View {
             SearchEventsView(session: session)
 
         case .events:
-            MyEventsView(viewModel: myEventsModel, session: session) {
-                isEventFormPresented = true
-            }
+            MyEventsView(
+                viewModel: myEventsModel,
+                session: session,
+                onEventCancelled: { selectedTab = .map },
+                onCreateEvent: { isEventFormPresented = true }
+            )
         }
     }
 

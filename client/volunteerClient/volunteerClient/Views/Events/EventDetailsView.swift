@@ -17,13 +17,17 @@ struct EventDetailsView: View {
 
     private let eventImageSize: CGFloat = 56
 
+    private let onEventCancelled: (() -> Void)?
+
     init(
         event: EventResponse,
         session: AppSession? = nil,
-        api: EventAPIProtocol? = nil
+        api: EventAPIProtocol? = nil,
+        onEventCancelled: (() -> Void)? = nil
     ) {
         self.session = session
         self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.onEventCancelled = onEventCancelled
         _currentEvent = State(initialValue: event)
     }
 
@@ -115,11 +119,7 @@ struct EventDetailsView: View {
             Color(.systemGray6)
                 .ignoresSafeArea(edges: .top)
 
-            Text("Детали события")
-                .font(.system(size: 20, weight: .semibold, design: .serif))
-                .foregroundColor(.black.opacity(0.78))
-
-            HStack {
+            HStack(spacing: 0) {
                 Button {
                     dismiss()
                 } label: {
@@ -134,42 +134,20 @@ struct EventDetailsView: View {
                         )
                 }
 
-                Spacer()
+                Text("Детали события")
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.78))
+                    .frame(maxWidth: .infinity)
 
                 if event.isCreator == true, session != nil {
                     HStack(spacing: 10) {
-                        if !isAlmostStarting {
-                            Button {
-                                showsDeleteAlert = true
-                            } label: {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
-                                    .frame(width: 36, height: 36)
-                                    .background(
-                                        Circle()
-                                            .stroke(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.4), lineWidth: 1)
-                                            .background(Circle().fill(Color.clear))
-                                    )
-                            }
-                            .buttonStyle(.plain)
+                        listButton
+                        if isAlmostStarting {
+                            trashButton
                         }
-
-                        Button {
-                            showsParticipantsManagement = true
-                        } label: {
-                            Image(systemName: "list.bullet.rectangle")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundColor(.black.opacity(0.75))
-                                .frame(width: 36, height: 36)
-                                .background(
-                                    Circle()
-                                        .stroke(Color.black.opacity(0.35), lineWidth: 1)
-                                        .background(Circle().fill(Color.clear))
-                                )
-                        }
-                        .buttonStyle(.plain)
                     }
+                } else {
+                    Color.clear.frame(width: 36, height: 36)
                 }
             }
             .padding(.horizontal, 20)
@@ -178,6 +156,40 @@ struct EventDetailsView: View {
         .overlay(alignment: .bottom) {
             Divider()
         }
+    }
+
+    private var trashButton: some View {
+        Button {
+            showsDeleteAlert = true
+        } label: {
+            Image(systemName: "trash")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                .frame(width: 36, height: 36)
+                .background(
+                    Circle()
+                        .stroke(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.4), lineWidth: 1)
+                        .background(Circle().fill(Color.clear))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var listButton: some View {
+        Button {
+            showsParticipantsManagement = true
+        } label: {
+            Image(systemName: "list.bullet.rectangle")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.black.opacity(0.75))
+                .frame(width: 36, height: 36)
+                .background(
+                    Circle()
+                        .stroke(Color.black.opacity(0.35), lineWidth: 1)
+                        .background(Circle().fill(Color.clear))
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var eventCard: some View {
@@ -618,11 +630,11 @@ struct EventDetailsView: View {
         defer { isParticipationLoading = false }
 
         do {
-            let updatedEvent = try await session.performAuthorizedRequest { token in
+            try await session.performAuthorizedRequest { token in
                 try await api.cancelEvent(id: currentEvent.id, reason: reason, token: token)
             }
-            currentEvent = updatedEvent
-            showMessage(updatedEvent.message ?? "Событие отменено")
+            onEventCancelled?()
+            dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
