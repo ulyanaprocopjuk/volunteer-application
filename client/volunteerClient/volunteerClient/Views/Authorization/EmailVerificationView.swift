@@ -106,6 +106,9 @@ struct EmailVerificationView: View {
 
                 resendRow
                     .padding(.top, 16)
+
+                skipButton
+                    .padding(.top, 24)
             }
             .padding(.horizontal, 30)
             .contentShape(Rectangle())
@@ -175,6 +178,19 @@ struct EmailVerificationView: View {
         }
         .buttonStyle(.plain)
         .disabled(vm.code.count != 6 || vm.isLoading)
+    }
+
+    private var skipButton: some View {
+        Button {
+            session.completeEmailVerification()
+        } label: {
+            Text("Пропустить")
+                .font(.custom("NotoSans-Medium", size: 15))
+                .underline()
+                .foregroundStyle(.black.opacity(0.5))
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var resendRow: some View {
