@@ -27,6 +27,11 @@ protocol EventAPIProtocol {
     func addGroupMember(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup
     func removeGroupMember(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup
     func confirmGroups(eventID: String, token: String) async throws -> EventResponse
+    func addGroup(eventID: String, token: String) async throws -> EventGroup
+    func deleteGroup(eventID: String, groupNumber: Int, token: String) async throws
+    func fetchMessages(eventID: String, token: String) async throws -> [ChatMessage]
+    func sendMessage(eventID: String, content: String?, photoURL: String?, token: String) async throws -> ChatMessage
+    func uploadMessagePhoto(data: Data, token: String) async throws -> String
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -356,6 +361,73 @@ final class EventAPI: EventAPIProtocol {
         let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    func addGroup(eventID: String, token: String) async throws -> EventGroup {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventGroup.self, from: data)
+    }
+
+    func deleteGroup(eventID: String, groupNumber: Int, token: String) async throws {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups/\(groupNumber)"))
+        urlRequest.httpMethod = "DELETE"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+    }
+
+    func fetchMessages(eventID: String, token: String) async throws -> [ChatMessage] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/messages"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([ChatMessage].self, from: data)
+    }
+
+    func sendMessage(eventID: String, content: String?, photoURL: String?, token: String) async throws -> ChatMessage {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/messages"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        var body: [String: String] = [:]
+        if let content { body["content"] = content }
+        if let photoURL { body["photoURL"] = photoURL }
+        urlRequest.httpBody = try JSONEncoder().encode(body)
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(ChatMessage.self, from: data)
+    }
+
+    func uploadMessagePhoto(data: Data, token: String) async throws -> String {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/uploads/message-photo"))
+        request.httpMethod = "POST"
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = makeMultipartBody(
+            boundary: boundary,
+            fieldName: "file",
+            fileName: "photo.jpg",
+            mimeType: "image/jpeg",
+            data: data
+        )
+
+        let (responseData, response) = try await NetworkRequestExecutor.data(for: request, session: session)
+        try validate(response: response, data: responseData)
+        guard let url = try? JSONDecoder().decode([String: String].self, from: responseData)["photo_url"] else {
+            throw EventAPIError.invalidResponse
+        }
+        return url
     }
 
     private func postGroupAction(path: String, token: String) async throws -> [EventGroup] {

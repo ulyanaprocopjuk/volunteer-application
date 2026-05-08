@@ -18,7 +18,9 @@ from app.schemas import (
     GroupLeaderRequest,
     GroupMemberRequest,
     GroupResponse,
+    MessageResponse,
     RemoveEventParticipantRequest,
+    SendMessageRequest,
 )
 from app.services.events_service import event_service
 
@@ -102,6 +104,15 @@ def confirm_grouping(
     return event_service.confirm_grouping(db, event_id, current_user, payload.group_count)
 
 
+@router.post("/{event_id}/groups", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
+def add_event_group(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.add_group(db, event_id, current_user)
+
+
 @router.get("/{event_id}/groups", response_model=list[GroupResponse])
 def list_event_groups(
     event_id: str,
@@ -159,6 +170,16 @@ def add_group_member(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     return event_service.add_group_member(db, event_id, group_number, payload.profile_id, current_user)
+
+
+@router.delete("/{event_id}/groups/{group_number}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_event_group(
+    event_id: str,
+    group_number: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    event_service.delete_group(db, event_id, group_number, current_user)
 
 
 @router.delete("/{event_id}/groups/{group_number}/members/{profile_id}", response_model=GroupResponse)
@@ -225,6 +246,25 @@ def remove_event_participant(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     return event_service.remove_participant(db, application_id, current_user, payload.reason)
+
+
+@router.get("/{event_id}/messages", response_model=list[MessageResponse])
+def list_event_messages(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.get_messages(db, event_id, current_user)
+
+
+@router.post("/{event_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+def send_event_message(
+    event_id: str,
+    payload: SendMessageRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.send_message(db, event_id, current_user, payload.content, payload.photo_url)
 
 
 @router.get("/my", response_model=list[EventResponse])

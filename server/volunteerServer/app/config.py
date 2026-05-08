@@ -11,6 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 AVATAR_DIR = UPLOAD_DIR / "avatars"
 EVENT_PHOTO_DIR = UPLOAD_DIR / "event_photos"
+MESSAGE_PHOTO_DIR = UPLOAD_DIR / "message_photos"
 
 ALLOWED_IMAGE_TYPES = {
     "image/jpeg": ".jpg",

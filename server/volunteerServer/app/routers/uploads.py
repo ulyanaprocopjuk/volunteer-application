@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from app.api.deps import get_current_user
-from app.config import ALLOWED_IMAGE_TYPES, AVATAR_DIR, EVENT_PHOTO_DIR
+from app.config import ALLOWED_IMAGE_TYPES, AVATAR_DIR, EVENT_PHOTO_DIR, MESSAGE_PHOTO_DIR
 from app.models import User
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
@@ -55,4 +55,28 @@ def upload_event_photo(
         copyfileobj(file.file, buffer)
 
     photo_url = str(request.base_url).rstrip("/") + f"/uploads/event_photos/{file_name}"
+    return {"photo_url": photo_url}
+
+
+@router.post("/message-photo", status_code=status.HTTP_201_CREATED)
+def upload_message_photo(
+    request: Request,
+    file: UploadFile = File(...),
+    _: Annotated[User, Depends(get_current_user)] = None,
+):
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only JPG, PNG and WEBP images are allowed",
+        )
+
+    MESSAGE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+    extension = ALLOWED_IMAGE_TYPES[file.content_type]
+    file_name = f"{uuid4().hex}{extension}"
+    file_path = MESSAGE_PHOTO_DIR / file_name
+
+    with file_path.open("wb") as buffer:
+        copyfileobj(file.file, buffer)
+
+    photo_url = str(request.base_url).rstrip("/") + f"/uploads/message_photos/{file_name}"
     return {"photo_url": photo_url}

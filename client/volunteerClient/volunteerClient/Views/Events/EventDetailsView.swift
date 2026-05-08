@@ -11,7 +11,8 @@ struct EventDetailsView: View {
     @State private var errorMessage: String?
     @State private var showsParticipantsManagement = false
     @State private var showsAttendanceConfirmation = false
-    @State private var showsGroupSelection = false
+    @State private var showsGroupFlow = false
+    @State private var showsChat = false
     @State private var showsCancelAlert = false
     @State private var showsDeleteAlert = false
     @State private var showsCancelEventPrompt = false
@@ -126,16 +127,24 @@ struct EventDetailsView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showsGroupSelection) {
+        .fullScreenCover(isPresented: $showsGroupFlow) {
             if let session {
-                EventGroupSelectionView(
-                    event: event,
-                    presentCount: event.presentCount ?? 0,
+                EventGroupFlowView(
+                    eventID: event.id,
                     session: session
                 ) { updatedEvent in
                     currentEvent = updatedEvent
                     showMessage(updatedEvent.message ?? "Событие началось")
                 }
+            }
+        }
+        .fullScreenCover(isPresented: $showsChat) {
+            if let session {
+                EventChatView(
+                    eventID: event.id,
+                    session: session,
+                    api: api
+                )
             }
         }
     }
@@ -248,6 +257,12 @@ struct EventDetailsView: View {
 
             if event.isCreator == true, (isAlmostStarting || isInAttendancePhase || isInGroupingPhase), session != nil {
                 organizerStartRow
+                    .padding(.top, 22)
+            }
+
+            if isActivePhase, session != nil,
+               event.isCreator == true || event.userApplicationStatus == "accepted" {
+                chatButton
                     .padding(.top, 22)
             }
         }
@@ -412,11 +427,35 @@ struct EventDetailsView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
+    private var chatButton: some View {
+        Button {
+            showsChat = true
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Text("Открыть чат")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var organizerStartRow: some View {
         HStack(spacing: 10) {
             Button {
                 if isInGroupingPhase {
-                    showsGroupSelection = true
+                    showsGroupFlow = true
                 } else {
                     showsAttendanceConfirmation = true
                 }
@@ -425,7 +464,7 @@ struct EventDetailsView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                    Text(isInGroupingPhase ? "Выбрать группы" : isInAttendancePhase ? "Продолжить отметку" : "Начать")
+                    Text(isInGroupingPhase ? "Расстановка групп" : isInAttendancePhase ? "Продолжить отметку" : "Начать")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                 }
@@ -468,6 +507,10 @@ struct EventDetailsView: View {
 
     private var isInGroupingPhase: Bool {
         event.status?.lowercased() == "grouping"
+    }
+
+    private var isActivePhase: Bool {
+        event.status?.lowercased() == "active"
     }
 
     private var participationButtonBackground: Color {

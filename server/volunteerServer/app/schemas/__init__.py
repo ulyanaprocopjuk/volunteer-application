@@ -21,7 +21,9 @@ from .events import (
     GroupMemberRequest,
     GroupMemberResponse,
     GroupResponse,
+    MessageResponse,
     RemoveEventParticipantRequest,
+    SendMessageRequest,
 )
 from .geocoding import ForwardGeocodeResponse, GeocodingSuggestionResponse, ReverseGeocodeResponse
 from .notifications import NotificationResponse
@@ -52,6 +54,8 @@ __all__ = [
     "GroupMemberRequest",
     "GroupMemberResponse",
     "GroupResponse",
+    "MessageResponse",
+    "SendMessageRequest",
     "CurrentCountryEventResponse",
     "NotificationResponse",
     "GeocodingSuggestionResponse",

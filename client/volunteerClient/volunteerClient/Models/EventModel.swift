@@ -205,6 +205,28 @@ struct RemoveEventParticipantRequest: Encodable {
     let reason: String
 }
 
+struct ChatMessage: Decodable, Identifiable, Hashable {
+    let id: Int
+    let eventID: String
+    let senderProfileID: Int
+    let content: String?
+    let photoURL: String?
+    let createdAt: String
+    let isOrganizer: Bool
+    let profile: ProfileResponse
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case eventID = "event_id"
+        case senderProfileID = "sender_profile_id"
+        case content
+        case photoURL = "photo_url"
+        case createdAt = "created_at"
+        case isOrganizer = "is_organizer"
+        case profile
+    }
+}
+
 struct GroupMember: Decodable, Identifiable, Hashable {
     let profileID: Int
     let role: String

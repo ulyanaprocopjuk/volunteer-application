@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -168,6 +169,32 @@ class GroupMemberRequest(BaseModel):
     profile_id: int = Field(alias="profileID")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class MessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    event_id: str
+    sender_profile_id: int
+    content: Optional[str] = None
+    photo_url: Optional[str] = None
+    created_at: datetime
+    is_organizer: bool = False
+    profile: ProfileResponse
+
+
+class SendMessageRequest(BaseModel):
+    content: Optional[str] = Field(default=None, max_length=2000)
+    photo_url: Optional[str] = Field(default=None, alias="photoURL")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="after")
+    def validate_content_or_photo(self):
+        if not self.content and not self.photo_url:
+            raise ValueError("Message must have content or a photo")
+        return self
 
 
 class CurrentCountryEventResponse(BaseModel):
