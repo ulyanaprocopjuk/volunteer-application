@@ -988,6 +988,8 @@ private struct AttendanceToggle: View {
 // MARK: - Group Flow
 
 struct EventGroupFlowView: View {
+    @Environment(\.dismiss) private var dismiss
+
     let eventID: String
     let session: AppSession
     let api: EventAPIProtocol
@@ -1046,7 +1048,14 @@ struct EventGroupFlowView: View {
                     api: api,
                     presentProfiles: resolvedProfiles,
                     onBack: {
+                        if let onBack { onBack() } else { dismiss() }
+                    },
+                    onGoToList: {
                         withAnimation(.easeInOut(duration: 0.25)) { phase = .list }
+                    },
+                    onDone: { event in
+                        onConfirmed?(event)
+                        withAnimation(.easeInOut(duration: 0.25)) { phase = .chat }
                     }
                 )
             case .chat:
@@ -1331,13 +1340,23 @@ private struct EventSingleGroupEditView: View {
     let session: AppSession
     let api: EventAPIProtocol
     let presentProfiles: [ProfileResponse]
+    let initialGroup: EventGroup
     let onBack: () -> Void
+    let onGoToList: () -> Void
+    let onDone: (EventResponse) -> Void
 
-    @State private var group: EventGroup
     @State private var allGroups: [EventGroup] = []
+    @State private var currentGroupIndex: Int = 0
     @State private var showsLeaderPicker = false
     @State private var showsMemberPicker = false
-    @State private var isLoading = false
+    @State private var showsDeleteAlert = false
+    @State private var isAdding = false
+    @State private var isDeleting = false
+    @State private var isClearing = false
+    @State private var showsAutoSheet = false
+    @State private var autoFillCount: Int = 1
+    @State private var isAutoFilling = false
+    @State private var isConfirming = false
     @State private var errorMessage: String?
 
     init(
@@ -1346,14 +1365,26 @@ private struct EventSingleGroupEditView: View {
         session: AppSession,
         api: EventAPIProtocol,
         presentProfiles: [ProfileResponse],
-        onBack: @escaping () -> Void
+        onBack: @escaping () -> Void,
+        onGoToList: @escaping () -> Void,
+        onDone: @escaping (EventResponse) -> Void
     ) {
         self.eventID = eventID
+        self.initialGroup = initialGroup
         self.session = session
         self.api = api
         self.presentProfiles = presentProfiles
         self.onBack = onBack
-        _group = State(initialValue: initialGroup)
+        self.onGoToList = onGoToList
+        self.onDone = onDone
+    }
+
+    private var maxGroups: Int { presentProfiles.count / 2 }
+    private var canAddGroup: Bool { allGroups.count < maxGroups }
+
+    private var currentGroup: EventGroup? {
+        guard currentGroupIndex < allGroups.count else { return nil }
+        return allGroups[currentGroupIndex]
     }
 
     private var assignedProfileIDs: Set<Int> {
@@ -1369,22 +1400,52 @@ private struct EventSingleGroupEditView: View {
         presentProfiles.filter { !assignedProfileIDs.contains($0.id) }
     }
 
+    private var canConfirm: Bool {
+        !allGroups.isEmpty && allGroups.allSatisfy { $0.leaderID != nil && !$0.members.isEmpty }
+    }
+
+    private var autoFillMax: Int {
+        guard let group = currentGroup else { return 0 }
+        let others = allGroups.filter { $0.groupNumber != group.groupNumber }
+        let occupiedSlots = others.reduce(0) { $0 + max(1, $1.members.count) }
+        return max(0, presentProfiles.count - allGroups.count - occupiedSlots)
+    }
+
+    private var autoFillDefault: Int {
+        guard let group = currentGroup else { return 1 }
+        let others = allGroups.filter { $0.groupNumber != group.groupNumber }
+        let actualSlots = others.reduce(0) { $0 + $1.members.count }
+        let raw = Double(presentProfiles.count - allGroups.count - actualSlots) / 2.0
+        return min(autoFillMax, max(1, Int(ceil(raw))))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             editHeader
+            groupNavRow
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    leaderSection
-                    membersSection
+            if let group = currentGroup {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        leaderSection(group: group)
+                        membersSection(group: group)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 32)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 32)
+            } else {
+                Spacer()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.white.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            confirmButton
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(.background)
+        }
         .task { await loadAllGroups() }
         .sheet(isPresented: $showsLeaderPicker) {
             ProfilePickerSheet(title: "Выбрать лидера", profiles: unassignedProfiles) { profile in
@@ -1395,6 +1456,19 @@ private struct EventSingleGroupEditView: View {
             ProfilePickerSheet(title: "Добавить участника", profiles: unassignedProfiles) { profile in
                 Task { await addMember(profileID: profile.id) }
             }
+        }
+        .sheet(isPresented: $showsAutoSheet) {
+            autoFillSheet
+                .presentationDetents([.fraction(0.25)])
+                .presentationDragIndicator(.hidden)
+        }
+        .alert("Удалить группу?", isPresented: $showsDeleteAlert) {
+            Button("Удалить", role: .destructive) {
+                Task { await deleteCurrentGroup() }
+            }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Вы уверены? Группа будет удалена.")
         }
         .alert("Ошибка", isPresented: Binding(
             get: { errorMessage != nil },
@@ -1410,7 +1484,7 @@ private struct EventSingleGroupEditView: View {
         ZStack {
             Color(.systemGray6).ignoresSafeArea(edges: .top)
 
-            Text("Группа \(group.groupNumber)")
+            Text("Создание групп")
                 .font(.system(size: 20, weight: .semibold, design: .serif))
                 .foregroundColor(.black.opacity(0.78))
 
@@ -1431,20 +1505,27 @@ private struct EventSingleGroupEditView: View {
                 Spacer()
 
                 Button {
-                    Task { await autoDistribute() }
+                    Task { await addGroup() }
                 } label: {
-                    Text("Авто")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color(red: 44/255, green: 67/255, blue: 102/255), lineWidth: 1)
-                        )
+                    if isAdding {
+                        ProgressView().frame(width: 36, height: 36)
+                    } else {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(canAddGroup ? .black.opacity(0.75) : .black.opacity(0.22))
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle()
+                                    .stroke(
+                                        canAddGroup ? Color.black.opacity(0.35) : Color.black.opacity(0.15),
+                                        lineWidth: 1
+                                    )
+                                    .background(Circle().fill(Color.clear))
+                            )
+                    }
                 }
                 .buttonStyle(.plain)
-                .disabled(isLoading)
+                .disabled(!canAddGroup || isAdding)
             }
             .padding(.horizontal, 20)
         }
@@ -1452,8 +1533,62 @@ private struct EventSingleGroupEditView: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
+    private var groupNavRow: some View {
+        HStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { currentGroupIndex -= 1 }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .opacity(currentGroupIndex > 0 ? 1 : 0)
+            .disabled(currentGroupIndex == 0)
+
+            Spacer()
+
+            if let group = currentGroup {
+                HStack(spacing: 10) {
+                    Text("Группа \(group.groupNumber)")
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .foregroundColor(.black.opacity(0.78))
+
+                    Button {
+                        showsDeleteAlert = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 15))
+                            .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isDeleting)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { currentGroupIndex += 1 }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .opacity(currentGroupIndex < allGroups.count - 1 ? 1 : 0)
+            .disabled(currentGroupIndex >= allGroups.count - 1)
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 44)
+        .background(Color(.systemGray6).opacity(0.4))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
     @ViewBuilder
-    private var leaderSection: some View {
+    private func leaderSection(group: EventGroup) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Лидер")
                 .font(.system(size: 15, weight: .semibold, design: .serif))
@@ -1470,7 +1605,7 @@ private struct EventSingleGroupEditView: View {
 
                     Image(systemName: "crown.fill")
                         .font(.system(size: 16))
-                        .foregroundColor(Color(red: 0.82, green: 0.62, blue: 0.07))
+                        .foregroundColor(Color(red: 0.22, green: 0.44, blue: 0.87))
 
                     Button {
                         Task { await removeLeader() }
@@ -1508,11 +1643,47 @@ private struct EventSingleGroupEditView: View {
     }
 
     @ViewBuilder
-    private var membersSection: some View {
+    private func membersSection(group: EventGroup) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Участники")
-                .font(.system(size: 15, weight: .semibold, design: .serif))
-                .foregroundColor(.black.opacity(0.55))
+            HStack {
+                Text("Участники")
+                    .font(.system(size: 15, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.55))
+
+                Spacer()
+
+                Button {
+                    Task { await clearMembers(group: group) }
+                } label: {
+                    Image(systemName: "xmark.bin")
+                        .font(.system(size: 15))
+                        .foregroundColor(
+                            group.members.isEmpty
+                                ? Color(.systemGray3)
+                                : Color(red: 0.80, green: 0.20, blue: 0.20)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(group.members.isEmpty || isClearing)
+                .padding(.trailing, 10)
+
+                Button {
+                    autoFillCount = autoFillDefault
+                    showsAutoSheet = true
+                } label: {
+                    Text("Авто")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color(red: 44/255, green: 67/255, blue: 102/255), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(autoFillMax == 0)
+            }
 
             ForEach(group.members) { member in
                 HStack(spacing: 12) {
@@ -1558,26 +1729,90 @@ private struct EventSingleGroupEditView: View {
         }
     }
 
+    private var confirmButton: some View {
+        Button {
+            Task { await confirmAllGroups() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(
+                        canConfirm
+                            ? Color(red: 44/255, green: 67/255, blue: 102/255)
+                            : Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.4)
+                    )
+                    .frame(height: 54)
+
+                if isConfirming {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Подтвердить")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!canConfirm || isConfirming)
+    }
+
     private func loadAllGroups() async {
         do {
             let fetched = try await session.performAuthorizedRequest { token in
                 try await api.fetchGroups(eventID: eventID, token: token)
             }
             allGroups = fetched
-            if let updated = fetched.first(where: { $0.id == group.id }) {
-                group = updated
+            if let idx = fetched.firstIndex(where: { $0.id == initialGroup.id }) {
+                currentGroupIndex = idx
             }
         } catch { }
     }
 
     private func updateGroupState(_ updated: EventGroup) {
-        group = updated
         if let index = allGroups.firstIndex(where: { $0.id == updated.id }) {
             allGroups[index] = updated
         }
     }
 
+    private func addGroup() async {
+        isAdding = true
+        defer { isAdding = false }
+        do {
+            let newGroup = try await session.performAuthorizedRequest { token in
+                try await api.addGroup(eventID: eventID, token: token)
+            }
+            allGroups.append(newGroup)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                currentGroupIndex = allGroups.count - 1
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteCurrentGroup() async {
+        guard let group = currentGroup else { return }
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            try await session.performAuthorizedRequest { token in
+                try await api.deleteGroup(eventID: eventID, groupNumber: group.groupNumber, token: token)
+            }
+            let fetched = try await session.performAuthorizedRequest { token in
+                try await api.fetchGroups(eventID: eventID, token: token)
+            }
+            if fetched.isEmpty {
+                onGoToList()
+            } else {
+                allGroups = fetched
+                currentGroupIndex = max(0, currentGroupIndex - 1)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func setLeader(profileID: Int) async {
+        guard let group = currentGroup else { return }
         do {
             let updated = try await session.performAuthorizedRequest { token in
                 try await api.setGroupLeader(
@@ -1594,6 +1829,7 @@ private struct EventSingleGroupEditView: View {
     }
 
     private func removeLeader() async {
+        guard let group = currentGroup else { return }
         do {
             let updated = try await session.performAuthorizedRequest { token in
                 try await api.removeGroupLeader(
@@ -1609,6 +1845,7 @@ private struct EventSingleGroupEditView: View {
     }
 
     private func addMember(profileID: Int) async {
+        guard let group = currentGroup else { return }
         do {
             let updated = try await session.performAuthorizedRequest { token in
                 try await api.addGroupMember(
@@ -1625,6 +1862,7 @@ private struct EventSingleGroupEditView: View {
     }
 
     private func removeMember(profileID: Int) async {
+        guard let group = currentGroup else { return }
         do {
             let updated = try await session.performAuthorizedRequest { token in
                 try await api.removeGroupMember(
@@ -1640,17 +1878,126 @@ private struct EventSingleGroupEditView: View {
         }
     }
 
-    private func autoDistribute() async {
-        isLoading = true
-        defer { isLoading = false }
+    private func clearMembers(group: EventGroup) async {
+        isClearing = true
+        defer { isClearing = false }
+        var current = group
+        for member in group.members {
+            do {
+                current = try await session.performAuthorizedRequest { token in
+                    try await api.removeGroupMember(
+                        eventID: eventID,
+                        groupNumber: group.groupNumber,
+                        profileID: member.profileID,
+                        token: token
+                    )
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+                break
+            }
+        }
+        updateGroupState(current)
+    }
+
+    @ViewBuilder
+    private var autoFillSheet: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    showsAutoSheet = false
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.black.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Text("Автозаполнение")
+                    .font(.system(size: 17, weight: .semibold, design: .serif))
+                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                Spacer()
+
+                Button("Отмена") {
+                    showsAutoSheet = false
+                }
+                .font(.system(size: 15))
+                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            HStack(spacing: 16) {
+                Picker("", selection: $autoFillCount) {
+                    ForEach(1...max(1, autoFillMax), id: \.self) { n in
+                        Text("\(n)").tag(n)
+                    }
+                }
+                .pickerStyle(.wheel)
+                .frame(width: 80)
+                .clipped()
+
+                Button {
+                    showsAutoSheet = false
+                    Task { await applyAutoFill() }
+                } label: {
+                    if isAutoFilling {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    } else {
+                        Text("Принять")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                            )
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isAutoFilling || autoFillMax == 0)
+            }
+            .padding(.horizontal, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.white)
+    }
+
+    private func applyAutoFill() async {
+        guard let group = currentGroup else { return }
+        isAutoFilling = true
+        defer { isAutoFilling = false }
+        let toAdd = Array(unassignedProfiles.prefix(autoFillCount))
+        var current = group
+        for profile in toAdd {
+            do {
+                current = try await session.performAuthorizedRequest { token in
+                    try await api.addGroupMember(eventID: eventID, groupNumber: group.groupNumber,
+                        profileID: profile.id, token: token)
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+                break
+            }
+        }
+        updateGroupState(current)
+    }
+
+    private func confirmAllGroups() async {
+        isConfirming = true
+        defer { isConfirming = false }
         do {
-            let updatedGroups = try await session.performAuthorizedRequest { token in
-                try await api.autoDistribute(eventID: eventID, token: token)
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.confirmGroups(eventID: eventID, token: token)
             }
-            allGroups = updatedGroups
-            if let updated = updatedGroups.first(where: { $0.id == group.id }) {
-                group = updated
-            }
+            onDone(updatedEvent)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -2030,6 +2377,21 @@ private struct ProfilePickerSheet: View {
     let profiles: [ProfileResponse]
     let onSelect: (ProfileResponse) -> Void
 
+    @State private var searchText = ""
+
+    private var filtered: [ProfileResponse] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return profiles }
+        return profiles.filter { profile in
+            let lastName = (profile.lastName ?? "").lowercased()
+            let firstName = (profile.firstName ?? "").lowercased()
+            let orgName = (profile.organizationName ?? "").lowercased()
+            return lastName.hasPrefix(query)
+                || firstName.hasPrefix(query)
+                || orgName.contains(query)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
@@ -2057,31 +2419,69 @@ private struct ProfilePickerSheet: View {
                     .foregroundColor(.black.opacity(0.5))
                 Spacer()
             } else {
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 10) {
-                        ForEach(profiles) { profile in
-                            Button {
-                                onSelect(profile)
-                                dismiss()
-                            } label: {
-                                HStack(spacing: 12) {
-                                    ParticipantAvatarView(avatarURL: profile.avatarURL, size: 46)
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.black.opacity(0.4))
 
-                                    Text(profile.displayName)
-                                        .font(.system(size: 16, weight: .semibold, design: .serif))
-                                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .padding(14)
-                                .background(Color(.systemGray6).opacity(0.65))
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
+                    TextField("Поиск по фамилии", text: $searchText)
+                        .font(.system(size: 15, design: .serif))
+                        .autocorrectionDisabled()
+
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 15))
+                                .foregroundColor(.black.opacity(0.35))
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 32)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(.systemGray6))
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 6)
+
+                if filtered.isEmpty {
+                    Spacer()
+                    Text("Ничего не найдено")
+                        .font(.system(size: 16, weight: .regular, design: .serif))
+                        .foregroundColor(.black.opacity(0.5))
+                    Spacer()
+                } else {
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: 10) {
+                            ForEach(filtered) { profile in
+                                Button {
+                                    onSelect(profile)
+                                    dismiss()
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        ParticipantAvatarView(avatarURL: profile.avatarURL, size: 46)
+
+                                        Text(profile.displayName)
+                                            .font(.system(size: 16, weight: .semibold, design: .serif))
+                                            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .padding(14)
+                                    .background(Color(.systemGray6).opacity(0.65))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
+                        .padding(.bottom, 32)
+                    }
                 }
             }
         }
