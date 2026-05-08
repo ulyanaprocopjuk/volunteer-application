@@ -91,6 +91,10 @@ def ensure_database_schema(engine: Engine) -> None:
     if "reviewed_at" not in columns:
         column_type = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
         statements.append(f"ALTER TABLE events ADD COLUMN reviewed_at {column_type} NULL")
+    if "present_count" not in columns:
+        statements.append("ALTER TABLE events ADD COLUMN present_count INTEGER NULL")
+    if "group_count" not in columns:
+        statements.append("ALTER TABLE events ADD COLUMN group_count INTEGER NULL")
 
     if not statements:
         return

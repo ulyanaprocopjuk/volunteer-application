@@ -65,6 +65,8 @@ class EventResponse(BaseModel):
     message: str | None = None
     organizer_name: str | None = Field(default=None, alias="organizerName")
     created_at: datetime | None = Field(default=None, alias="created_at")
+    present_count: int | None = Field(default=None)
+    group_count: int | None = Field(default=None)
 
     @field_validator("status")
     @classmethod
@@ -117,6 +119,12 @@ class CancelEventRequest(BaseModel):
         return value
 
 
+class GroupingRequest(BaseModel):
+    group_count: int = Field(ge=0, le=5, alias="groupCount")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class AttendanceItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -127,6 +135,37 @@ class AttendanceItemResponse(BaseModel):
 
 class ConfirmAttendanceRequest(BaseModel):
     present_application_ids: list[int] = Field(alias="presentApplicationIDs")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GroupMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    profile_id: int
+    role: str
+    profile: ProfileResponse
+
+
+class GroupResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    event_id: str
+    group_number: int
+    leader_id: int | None = None
+    leader: ProfileResponse | None = None
+    members: list[GroupMemberResponse] = []
+
+
+class GroupLeaderRequest(BaseModel):
+    profile_id: int = Field(alias="profileID")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class GroupMemberRequest(BaseModel):
+    profile_id: int = Field(alias="profileID")
 
     model_config = ConfigDict(populate_by_name=True)
 

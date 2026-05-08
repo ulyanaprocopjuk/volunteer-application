@@ -733,6 +733,7 @@ struct EventAttendanceConfirmationView: View {
     @State private var isLoading = false
     @State private var isConfirming = false
     @State private var errorMessage: String?
+    @State private var groupingEvent: EventResponse? = nil
 
     init(
         eventID: String,
@@ -749,6 +750,23 @@ struct EventAttendanceConfirmationView: View {
     }
 
     var body: some View {
+        if let groupingEvent {
+            EventGroupSelectionView(
+                event: groupingEvent,
+                presentCount: groupingEvent.presentCount ?? presentIDs.count,
+                session: session,
+                api: api,
+                presentProfiles: attendanceItems
+                    .filter { presentIDs.contains($0.applicationID) }
+                    .map { $0.profile },
+                onConfirmed: onConfirmed
+            )
+        } else {
+            attendanceContent
+        }
+    }
+
+    private var attendanceContent: some View {
         VStack(spacing: 0) {
             attendanceHeader
 
@@ -909,8 +927,15 @@ struct EventAttendanceConfirmationView: View {
                     token: token
                 )
             }
-            onConfirmed?(updatedEvent)
-            dismiss()
+
+            if updatedEvent.status?.lowercased() == "grouping" {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    groupingEvent = updatedEvent
+                }
+            } else {
+                onConfirmed?(updatedEvent)
+                dismiss()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -945,6 +970,752 @@ private struct AttendanceToggle: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Group Selection
+
+struct EventGroupSelectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let event: EventResponse
+    let presentCount: Int
+    let session: AppSession
+    let api: EventAPIProtocol
+    let onConfirmed: ((EventResponse) -> Void)?
+
+    private let passedPresentProfiles: [ProfileResponse]
+
+    @State private var selectedGroupCount: Int
+    @State private var showsNoGroupsConfirmation = false
+    @State private var isConfirming = false
+    @State private var isLoadingGroups = true
+    @State private var groups: [EventGroup]? = nil
+    @State private var presentProfiles: [ProfileResponse]
+    @State private var errorMessage: String?
+    @State private var saveTask: Task<Void, Never>? = nil
+
+    init(
+        event: EventResponse,
+        presentCount: Int,
+        session: AppSession,
+        api: EventAPIProtocol? = nil,
+        presentProfiles: [ProfileResponse] = [],
+        onConfirmed: ((EventResponse) -> Void)? = nil
+    ) {
+        self.event = event
+        self.presentCount = presentCount
+        self.session = session
+        self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.passedPresentProfiles = presentProfiles
+        self.onConfirmed = onConfirmed
+        _selectedGroupCount = State(initialValue: event.groupCount ?? 0)
+        _presentProfiles = State(initialValue: presentProfiles)
+    }
+
+    private var maxGroups: Int {
+        min(5, presentCount / 2)
+    }
+
+    private var availableOptions: [Int] {
+        var options = [0]
+        if maxGroups >= 2 {
+            options += Array(2...maxGroups)
+        }
+        return options
+    }
+
+    var body: some View {
+        if let groups, !groups.isEmpty {
+            EventGroupAssignmentView(
+                event: event,
+                initialGroups: groups,
+                presentProfiles: presentProfiles,
+                session: session,
+                api: api,
+                onConfirmed: onConfirmed
+            )
+        } else if isLoadingGroups {
+            VStack(spacing: 0) {
+                groupHeader
+                Spacer()
+                ProgressView()
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Color.white.ignoresSafeArea())
+            .task { await loadInitialState() }
+        } else {
+            pickerContent
+        }
+    }
+
+    private var pickerContent: some View {
+        VStack(spacing: 0) {
+            groupHeader
+
+            Spacer()
+
+            Text("Выберите количество групп")
+                .font(.system(size: 18, weight: .regular, design: .serif))
+                .foregroundColor(.black.opacity(0.7))
+                .padding(.bottom, 8)
+
+            Picker("", selection: $selectedGroupCount) {
+                ForEach(availableOptions, id: \.self) { option in
+                    Text(option == 0 ? "Без групп" : "\(option)")
+                        .font(.system(size: 22, weight: .regular, design: .serif))
+                        .tag(option)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: 200)
+            .onChange(of: selectedGroupCount) { _, newValue in
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                scheduleSave(newValue)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.white.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            nextButton
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(.background)
+        }
+        .alert("Без групп", isPresented: $showsNoGroupsConfirmation) {
+            Button("Подтвердить", role: .destructive) {
+                Task { await confirm(groupCount: 0) }
+            }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Вы уверены, что хотите провести событие без групп?")
+        }
+        .alert("Ошибка", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { _ in errorMessage = nil }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var groupHeader: some View {
+        ZStack {
+            Color(.systemGray6)
+                .ignoresSafeArea(edges: .top)
+
+            HStack(spacing: 0) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.black.opacity(0.75))
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .stroke(Color.black.opacity(0.35), lineWidth: 1)
+                                .background(Circle().fill(Color.clear))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Text("Количество групп")
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.78))
+                    .frame(maxWidth: .infinity)
+
+                Color.clear.frame(width: 36, height: 36)
+            }
+            .padding(.horizontal, 20)
+        }
+        .frame(height: 60)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private var nextButton: some View {
+        Button {
+            if selectedGroupCount == 0 {
+                showsNoGroupsConfirmation = true
+            } else {
+                Task { await confirm(groupCount: selectedGroupCount) }
+            }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .frame(height: 54)
+
+                if isConfirming {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Далее")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isConfirming)
+        .opacity(isConfirming ? 0.6 : 1)
+    }
+
+    private func loadInitialState() async {
+        defer { isLoadingGroups = false }
+
+        do {
+            let fetchedGroups = try await session.performAuthorizedRequest { token in
+                try await api.fetchGroups(eventID: event.id, token: token)
+            }
+
+            if !fetchedGroups.isEmpty {
+                if passedPresentProfiles.isEmpty {
+                    let items = (try? await session.performAuthorizedRequest { token in
+                        try await api.fetchAttendance(eventID: event.id, token: token)
+                    }) ?? []
+                    presentProfiles = items.filter { $0.isPresent }.map { $0.profile }
+                }
+                groups = fetchedGroups
+            } else {
+                groups = []
+            }
+        } catch {
+            groups = []
+        }
+    }
+
+    private func scheduleSave(_ groupCount: Int) {
+        saveTask?.cancel()
+        saveTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            _ = try? await session.performAuthorizedRequest { token in
+                try await api.saveGroupCountDraft(eventID: event.id, groupCount: groupCount, token: token)
+            }
+        }
+    }
+
+    private func confirm(groupCount: Int) async {
+        isConfirming = true
+        saveTask?.cancel()
+        defer { isConfirming = false }
+
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.confirmGrouping(eventID: event.id, groupCount: groupCount, token: token)
+            }
+
+            if (updatedEvent.status ?? "").lowercased() == "grouping" {
+                let fetchedGroups = try await session.performAuthorizedRequest { token in
+                    try await api.fetchGroups(eventID: event.id, token: token)
+                }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    groups = fetchedGroups
+                }
+            } else {
+                onConfirmed?(updatedEvent)
+                dismiss()
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Group Assignment
+
+struct EventGroupAssignmentView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let event: EventResponse
+    let session: AppSession
+    let api: EventAPIProtocol
+    let onConfirmed: ((EventResponse) -> Void)?
+    let presentProfiles: [ProfileResponse]
+
+    @State private var groups: [EventGroup]
+    @State private var currentGroupIndex: Int = 0
+    @State private var showsLeaderPicker = false
+    @State private var showsMemberPicker = false
+    @State private var isConfirming = false
+    @State private var errorMessage: String?
+
+    init(
+        event: EventResponse,
+        initialGroups: [EventGroup],
+        presentProfiles: [ProfileResponse],
+        session: AppSession,
+        api: EventAPIProtocol? = nil,
+        onConfirmed: ((EventResponse) -> Void)? = nil
+    ) {
+        self.event = event
+        self.session = session
+        self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.onConfirmed = onConfirmed
+        self.presentProfiles = presentProfiles
+        _groups = State(initialValue: initialGroups)
+    }
+
+    private var currentGroup: EventGroup? {
+        guard currentGroupIndex < groups.count else { return nil }
+        return groups[currentGroupIndex]
+    }
+
+    private var assignedProfileIDs: Set<Int> {
+        var ids = Set<Int>()
+        for group in groups {
+            if let leaderID = group.leaderID { ids.insert(leaderID) }
+            for member in group.members { ids.insert(member.profileID) }
+        }
+        return ids
+    }
+
+    private var unassignedProfiles: [ProfileResponse] {
+        presentProfiles.filter { !assignedProfileIDs.contains($0.id) }
+    }
+
+    private var canConfirm: Bool {
+        groups.allSatisfy { $0.leaderID != nil }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            assignmentHeader
+
+            if let group = currentGroup {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        leaderSection(group: group)
+                        membersSection(group: group)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 32)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.white.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            confirmButton
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(.background)
+        }
+        .sheet(isPresented: $showsLeaderPicker) {
+            ProfilePickerSheet(
+                title: "Выбрать лидера",
+                profiles: unassignedProfiles
+            ) { profile in
+                Task { await setLeader(profileID: profile.id) }
+            }
+        }
+        .sheet(isPresented: $showsMemberPicker) {
+            ProfilePickerSheet(
+                title: "Добавить участника",
+                profiles: unassignedProfiles
+            ) { profile in
+                Task { await addMember(profileID: profile.id) }
+            }
+        }
+        .alert("Ошибка", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { _ in errorMessage = nil }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var assignmentHeader: some View {
+        ZStack {
+            Color(.systemGray6).ignoresSafeArea(edges: .top)
+
+            HStack(spacing: 0) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.black.opacity(0.75))
+                        .frame(width: 36, height: 36)
+                        .background(
+                            Circle()
+                                .stroke(Color.black.opacity(0.35), lineWidth: 1)
+                                .background(Circle().fill(Color.clear))
+                        )
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                HStack(spacing: 16) {
+                    Button {
+                        if currentGroupIndex > 0 {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                currentGroupIndex -= 1
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(currentGroupIndex > 0 ? Color(red: 44/255, green: 67/255, blue: 102/255) : .clear)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(currentGroupIndex == 0)
+
+                    Text("Группа \(currentGroupIndex + 1) из \(groups.count)")
+                        .font(.system(size: 18, weight: .semibold, design: .serif))
+                        .foregroundColor(.black.opacity(0.78))
+
+                    Button {
+                        if currentGroupIndex < groups.count - 1 {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                currentGroupIndex += 1
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(currentGroupIndex < groups.count - 1 ? Color(red: 44/255, green: 67/255, blue: 102/255) : .clear)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(currentGroupIndex >= groups.count - 1)
+                }
+
+                Spacer()
+
+                Color.clear.frame(width: 36, height: 36)
+            }
+            .padding(.horizontal, 20)
+        }
+        .frame(height: 60)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    @ViewBuilder
+    private func leaderSection(group: EventGroup) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Лидер")
+                .font(.system(size: 15, weight: .semibold, design: .serif))
+                .foregroundColor(.black.opacity(0.55))
+
+            if let leader = group.leader {
+                HStack(spacing: 12) {
+                    ParticipantAvatarView(avatarURL: leader.avatarURL, size: 48)
+
+                    Text(leader.displayName)
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(Color(red: 0.82, green: 0.62, blue: 0.07))
+
+                    Button {
+                        Task { await removeLeader() }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10)))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(14)
+                .background(Color(.systemGray6).opacity(0.65))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                Button {
+                    showsLeaderPicker = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                        Text("Выбрать лидера")
+                            .font(.system(size: 16, weight: .semibold, design: .serif))
+                            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(Color(.systemGray6).opacity(0.65))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(unassignedProfiles.isEmpty)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func membersSection(group: EventGroup) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Участники")
+                    .font(.system(size: 15, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.55))
+
+                Spacer()
+
+                Button {
+                    Task { await autoDistribute() }
+                } label: {
+                    Text("Авто")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color(red: 44/255, green: 67/255, blue: 102/255), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+
+            ForEach(group.members) { member in
+                HStack(spacing: 12) {
+                    ParticipantAvatarView(avatarURL: member.profile.avatarURL, size: 48)
+
+                    Text(member.profile.displayName)
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        Task { await removeMember(profileID: member.profileID) }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10)))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(14)
+                .background(Color(.systemGray6).opacity(0.65))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+
+            Button {
+                showsMemberPicker = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                    Text("Добавить участника")
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(Color(.systemGray6).opacity(0.65))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(unassignedProfiles.isEmpty)
+        }
+    }
+
+    private var confirmButton: some View {
+        Button {
+            Task { await confirmGroups() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(canConfirm
+                          ? Color(red: 44/255, green: 67/255, blue: 102/255)
+                          : Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.4))
+                    .frame(height: 54)
+
+                if isConfirming {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Подтвердить группы")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isConfirming || !canConfirm)
+    }
+
+    private func updateGroup(_ updatedGroup: EventGroup) {
+        if let index = groups.firstIndex(where: { $0.id == updatedGroup.id }) {
+            groups[index] = updatedGroup
+        }
+    }
+
+    private func setLeader(profileID: Int) async {
+        guard let group = currentGroup else { return }
+        do {
+            let updatedGroup = try await session.performAuthorizedRequest { token in
+                try await api.setGroupLeader(
+                    eventID: event.id,
+                    groupNumber: group.groupNumber,
+                    profileID: profileID,
+                    token: token
+                )
+            }
+            updateGroup(updatedGroup)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeLeader() async {
+        guard let group = currentGroup else { return }
+        do {
+            let updatedGroup = try await session.performAuthorizedRequest { token in
+                try await api.removeGroupLeader(
+                    eventID: event.id,
+                    groupNumber: group.groupNumber,
+                    token: token
+                )
+            }
+            updateGroup(updatedGroup)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func addMember(profileID: Int) async {
+        guard let group = currentGroup else { return }
+        do {
+            let updatedGroup = try await session.performAuthorizedRequest { token in
+                try await api.addGroupMember(
+                    eventID: event.id,
+                    groupNumber: group.groupNumber,
+                    profileID: profileID,
+                    token: token
+                )
+            }
+            updateGroup(updatedGroup)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeMember(profileID: Int) async {
+        guard let group = currentGroup else { return }
+        do {
+            let updatedGroup = try await session.performAuthorizedRequest { token in
+                try await api.removeGroupMember(
+                    eventID: event.id,
+                    groupNumber: group.groupNumber,
+                    profileID: profileID,
+                    token: token
+                )
+            }
+            updateGroup(updatedGroup)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func autoDistribute() async {
+        do {
+            let updatedGroups = try await session.performAuthorizedRequest { token in
+                try await api.autoDistribute(eventID: event.id, token: token)
+            }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                groups = updatedGroups
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func confirmGroups() async {
+        isConfirming = true
+        defer { isConfirming = false }
+
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.confirmGroups(eventID: event.id, token: token)
+            }
+            onConfirmed?(updatedEvent)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Profile Picker Sheet
+
+private struct ProfilePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    let profiles: [ProfileResponse]
+    let onSelect: (ProfileResponse) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Color(.systemGray6).ignoresSafeArea(edges: .top)
+
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.78))
+
+                HStack {
+                    Spacer()
+                    Button("Закрыть") { dismiss() }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                }
+                .padding(.horizontal, 20)
+            }
+            .frame(height: 56)
+            .overlay(alignment: .bottom) { Divider() }
+
+            if profiles.isEmpty {
+                Spacer()
+                Text("Все участники уже распределены")
+                    .font(.system(size: 16, weight: .regular, design: .serif))
+                    .foregroundColor(.black.opacity(0.5))
+                Spacer()
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 10) {
+                        ForEach(profiles) { profile in
+                            Button {
+                                onSelect(profile)
+                                dismiss()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    ParticipantAvatarView(avatarURL: profile.avatarURL, size: 46)
+
+                                    Text(profile.displayName)
+                                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(14)
+                                .background(Color(.systemGray6).opacity(0.65))
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 32)
+                }
+            }
+        }
+        .background(Color.white.ignoresSafeArea())
     }
 }
 

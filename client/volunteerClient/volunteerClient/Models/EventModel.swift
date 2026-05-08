@@ -37,6 +37,8 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     let message: String?
     let organizerName: String?
     let createdAt: String?
+    let presentCount: Int?
+    let groupCount: Int?
 
     init(
         id: String,
@@ -58,7 +60,9 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         status: String?,
         message: String?,
         organizerName: String?,
-        createdAt: String?
+        createdAt: String?,
+        presentCount: Int? = nil,
+        groupCount: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -80,6 +84,8 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         self.message = message
         self.organizerName = organizerName
         self.createdAt = createdAt
+        self.presentCount = presentCount
+        self.groupCount = groupCount
     }
 
     enum CodingKeys: String, CodingKey {
@@ -103,6 +109,8 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         case message
         case organizerName
         case createdAt = "created_at"
+        case presentCount = "present_count"
+        case groupCount = "group_count"
     }
 }
 
@@ -195,6 +203,38 @@ struct ConfirmAttendanceRequest: Encodable {
 
 struct RemoveEventParticipantRequest: Encodable {
     let reason: String
+}
+
+struct GroupMember: Decodable, Identifiable, Hashable {
+    let profileID: Int
+    let role: String
+    let profile: ProfileResponse
+
+    var id: Int { profileID }
+
+    enum CodingKeys: String, CodingKey {
+        case profileID = "profile_id"
+        case role
+        case profile
+    }
+}
+
+struct EventGroup: Decodable, Identifiable, Hashable {
+    let id: Int
+    let eventID: String
+    let groupNumber: Int
+    let leaderID: Int?
+    let leader: ProfileResponse?
+    let members: [GroupMember]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case eventID = "event_id"
+        case groupNumber = "group_number"
+        case leaderID = "leader_id"
+        case leader
+        case members
+    }
 }
 
 enum MyEventsFilter: String {
@@ -303,6 +343,7 @@ enum EventModerationStatus {
             || value.contains("accept")
             || value.contains("active")
             || value.contains("attendance")
+            || value.contains("grouping")
             || value.contains("актив")
             || value.contains("published")
             || value.contains("подтверж") {

@@ -6,7 +6,7 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import and_, false, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, Profile, ProfileType, User
+from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, EventGroup, EventGroupMember, Profile, ProfileType, User
 from app.schemas import (
     AttendanceItemResponse,
     ConfirmAttendanceRequest,
@@ -14,6 +14,9 @@ from app.schemas import (
     CurrentCountryEventResponse,
     EventParticipantResponse,
     EventResponse,
+    GroupingRequest,
+    GroupMemberResponse,
+    GroupResponse,
 )
 from app.services.geocoding_service import COUNTRY_ALIASES
 from app.services.location_display import build_location_display
@@ -122,7 +125,7 @@ class EventService:
 
         if normalized_filter == "active":
             query = query.where(
-                func.lower(Event.status).in_(("approved", "active")),
+                func.lower(Event.status).in_(("approved", "active", "attendance", "grouping")),
                 event_end >= comparison_time,
             )
         elif normalized_filter == "history":
@@ -347,7 +350,7 @@ class EventService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can cancel event")
 
         normalized_status = (event.status or "").strip().lower()
-        if normalized_status not in ("pending", "approved", "active", "attendance"):
+        if normalized_status not in ("pending", "approved", "active", "attendance", "grouping"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event cannot be cancelled")
 
         normalized_reason = reason.strip()
@@ -437,7 +440,7 @@ class EventService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can view attendance")
 
         normalized_status = (event.status or "").strip().lower()
-        if normalized_status != "attendance":
+        if normalized_status not in ("attendance", "grouping"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in attendance phase")
 
         attendance_records = db.scalars(
@@ -481,10 +484,233 @@ class EventService:
             record.is_present = record.application_id in present_set
             record.checked_at = now
 
+        present_count = len(present_set)
+        event.present_count = present_count
+
+        if present_count >= 4:
+            event.status = "grouping"
+            event.group_count = None
+            db.commit()
+            db.refresh(event)
+            response = self._response(db, event, user)
+            response.message = "Выберите количество групп"
+        else:
+            event.status = "active"
+            db.commit()
+            db.refresh(event)
+            response = self._response(db, event, user)
+            response.message = "Событие началось"
+
+        return response
+
+    def save_group_count_draft(self, db: Session, event_id: str, user: User, group_count: int) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can update grouping")
+
+        if (event.status or "").strip().lower() != "grouping":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+
+        event.group_count = group_count
+        db.commit()
+        db.refresh(event)
+        return self._response(db, event, user)
+
+    def confirm_grouping(self, db: Session, event_id: str, user: User, group_count: int) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can confirm grouping")
+
+        if (event.status or "").strip().lower() != "grouping":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+
+        event.group_count = group_count
+
+        if group_count == 0:
+            event.status = "active"
+            db.commit()
+            db.refresh(event)
+            response = self._response(db, event, user)
+            response.message = "Событие началось"
+            return response
+
+        existing_groups = db.scalars(
+            select(EventGroup).where(EventGroup.event_id == event_id)
+        ).all()
+        existing_numbers = {g.group_number for g in existing_groups}
+
+        for n in range(1, group_count + 1):
+            if n not in existing_numbers:
+                db.add(EventGroup(event_id=event_id, group_number=n))
+
+        for group in existing_groups:
+            if group.group_number > group_count:
+                db.delete(group)
+
+        db.commit()
+        db.refresh(event)
+        response = self._response(db, event, user)
+        response.message = "Распределите участников по группам"
+        return response
+
+    def get_groups(self, db: Session, event_id: str, user: User) -> list[GroupResponse]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can view groups")
+
+        if (event.status or "").strip().lower() != "grouping":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+
+        groups = db.scalars(
+            select(EventGroup).where(EventGroup.event_id == event_id).order_by(EventGroup.group_number)
+        ).all()
+
+        return [self._group_response(group) for group in groups]
+
+    def set_group_leader(self, db: Session, event_id: str, group_number: int, profile_id: int, user: User) -> GroupResponse:
+        event, group = self._get_grouping_event_and_group(db, event_id, group_number, user)
+        self._validate_profile_is_present(db, event_id, profile_id)
+        self._remove_profile_from_all_groups(db, event_id, profile_id, exclude_group_id=group.id)
+        group.leader_id = profile_id
+        db.commit()
+        db.refresh(group)
+        return self._group_response(group)
+
+    def remove_group_leader(self, db: Session, event_id: str, group_number: int, user: User) -> GroupResponse:
+        _, group = self._get_grouping_event_and_group(db, event_id, group_number, user)
+        group.leader_id = None
+        db.commit()
+        db.refresh(group)
+        return self._group_response(group)
+
+    def add_group_member(self, db: Session, event_id: str, group_number: int, profile_id: int, user: User) -> GroupResponse:
+        event, group = self._get_grouping_event_and_group(db, event_id, group_number, user)
+        self._validate_profile_is_present(db, event_id, profile_id)
+
+        if group.leader_id == profile_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Person is already the group leader")
+
+        self._remove_profile_from_all_groups(db, event_id, profile_id, exclude_group_id=group.id)
+
+        existing = db.scalar(
+            select(EventGroupMember).where(
+                EventGroupMember.group_id == group.id,
+                EventGroupMember.profile_id == profile_id,
+            )
+        )
+        if existing is None:
+            db.add(EventGroupMember(group_id=group.id, profile_id=profile_id, role="member"))
+            db.commit()
+
+        db.refresh(group)
+        return self._group_response(group)
+
+    def remove_group_member(self, db: Session, event_id: str, group_number: int, profile_id: int, user: User) -> GroupResponse:
+        _, group = self._get_grouping_event_and_group(db, event_id, group_number, user)
+
+        member = db.scalar(
+            select(EventGroupMember).where(
+                EventGroupMember.group_id == group.id,
+                EventGroupMember.profile_id == profile_id,
+            )
+        )
+        if member:
+            db.delete(member)
+            db.commit()
+
+        db.refresh(group)
+        return self._group_response(group)
+
+    def auto_distribute(self, db: Session, event_id: str, user: User) -> list[GroupResponse]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can auto-distribute")
+
+        if (event.status or "").strip().lower() != "grouping":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+
+        groups = db.scalars(
+            select(EventGroup).where(EventGroup.event_id == event_id).order_by(EventGroup.group_number)
+        ).all()
+
+        if not groups:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No groups exist")
+
+        attendance_records = db.scalars(
+            select(EventAttendance).where(
+                EventAttendance.event_id == event_id,
+                EventAttendance.is_present == True,
+            )
+        ).all()
+
+        profiles = sorted(
+            [record.application.volunteer for record in attendance_records],
+            key=lambda p: (
+                (p.first_name or p.organization_name or "").lower(),
+                (p.last_name or "").lower(),
+            ),
+        )
+
+        for group in groups:
+            group.leader_id = None
+            for member in list(group.members):
+                db.delete(member)
+        db.flush()
+
+        group_count = len(groups)
+        for i, profile in enumerate(profiles):
+            group = groups[i % group_count]
+            if group.leader_id is None:
+                group.leader_id = profile.id
+            else:
+                db.add(EventGroupMember(group_id=group.id, profile_id=profile.id, role="member"))
+
+        db.commit()
+        for group in groups:
+            db.refresh(group)
+
+        return [self._group_response(group) for group in groups]
+
+    def confirm_groups(self, db: Session, event_id: str, user: User) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can confirm groups")
+
+        if (event.status or "").strip().lower() != "grouping":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+
+        groups = db.scalars(
+            select(EventGroup).where(EventGroup.event_id == event_id).order_by(EventGroup.group_number)
+        ).all()
+
+        if not groups:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No groups exist")
+
+        for group in groups:
+            if group.leader_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Группа {group.group_number} не имеет лидера",
+                )
+
         event.status = "active"
         db.commit()
         db.refresh(event)
-
         response = self._response(db, event, user)
         response.message = "Событие началось"
         return response
@@ -651,6 +877,73 @@ class EventService:
         response.message = f"{response_message}: {applicant_name}"
         return response
 
+    def _get_grouping_event_and_group(
+        self, db: Session, event_id: str, group_number: int, user: User
+    ) -> tuple[Event, EventGroup]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can modify groups")
+        if (event.status or "").strip().lower() != "grouping":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+        group = db.scalar(
+            select(EventGroup).where(
+                EventGroup.event_id == event_id,
+                EventGroup.group_number == group_number,
+            )
+        )
+        if group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+        return event, group
+
+    @staticmethod
+    def _validate_profile_is_present(db: Session, event_id: str, profile_id: int) -> None:
+        attendance = db.scalar(
+            select(EventAttendance)
+            .join(EventApplication, EventAttendance.application_id == EventApplication.id)
+            .where(
+                EventAttendance.event_id == event_id,
+                EventAttendance.is_present == True,
+                EventApplication.volunteer_id == profile_id,
+            )
+        )
+        if attendance is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Person is not a present attendee")
+
+    @staticmethod
+    def _remove_profile_from_all_groups(
+        db: Session, event_id: str, profile_id: int, exclude_group_id: int | None = None
+    ) -> None:
+        groups = db.scalars(select(EventGroup).where(EventGroup.event_id == event_id)).all()
+        for group in groups:
+            if group.id == exclude_group_id:
+                continue
+            if group.leader_id == profile_id:
+                group.leader_id = None
+            member = next((m for m in group.members if m.profile_id == profile_id), None)
+            if member:
+                db.delete(member)
+        db.flush()
+
+    @staticmethod
+    def _group_response(group: EventGroup) -> GroupResponse:
+        return GroupResponse(
+            id=group.id,
+            event_id=group.event_id,
+            group_number=group.group_number,
+            leader_id=group.leader_id,
+            leader=group.leader,
+            members=[
+                GroupMemberResponse(
+                    profile_id=member.profile_id,
+                    role=member.role,
+                    profile=member.profile,
+                )
+                for member in group.members
+            ],
+        )
+
     @staticmethod
     def _accepted_count(db: Session, event_id: str) -> int:
         return db.scalar(
@@ -757,7 +1050,7 @@ class EventService:
         result = db.execute(
             update(Event)
             .where(
-                func.lower(Event.status).in_(("approved", "active", "attendance")),
+                func.lower(Event.status).in_(("approved", "active", "attendance", "grouping")),
                 event_end < comparison_time,
             )
             .values(

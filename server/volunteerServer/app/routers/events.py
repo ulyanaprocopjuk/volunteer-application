@@ -14,6 +14,10 @@ from app.schemas import (
     CurrentCountryEventResponse,
     EventParticipantResponse,
     EventResponse,
+    GroupingRequest,
+    GroupLeaderRequest,
+    GroupMemberRequest,
+    GroupResponse,
     RemoveEventParticipantRequest,
 )
 from app.services.events_service import event_service
@@ -76,6 +80,96 @@ def confirm_attendance(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     return event_service.confirm_attendance(db, event_id, current_user, payload.present_application_ids)
+
+
+@router.patch("/{event_id}/grouping", response_model=EventResponse)
+def save_group_count_draft(
+    event_id: str,
+    payload: GroupingRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.save_group_count_draft(db, event_id, current_user, payload.group_count)
+
+
+@router.post("/{event_id}/grouping/confirm", response_model=EventResponse)
+def confirm_grouping(
+    event_id: str,
+    payload: GroupingRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.confirm_grouping(db, event_id, current_user, payload.group_count)
+
+
+@router.get("/{event_id}/groups", response_model=list[GroupResponse])
+def list_event_groups(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.get_groups(db, event_id, current_user)
+
+
+@router.post("/{event_id}/groups/auto", response_model=list[GroupResponse])
+def auto_distribute_groups(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.auto_distribute(db, event_id, current_user)
+
+
+@router.post("/{event_id}/groups/confirm", response_model=EventResponse)
+def confirm_event_groups(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.confirm_groups(db, event_id, current_user)
+
+
+@router.put("/{event_id}/groups/{group_number}/leader", response_model=GroupResponse)
+def set_group_leader(
+    event_id: str,
+    group_number: int,
+    payload: GroupLeaderRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.set_group_leader(db, event_id, group_number, payload.profile_id, current_user)
+
+
+@router.delete("/{event_id}/groups/{group_number}/leader", response_model=GroupResponse)
+def remove_group_leader(
+    event_id: str,
+    group_number: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.remove_group_leader(db, event_id, group_number, current_user)
+
+
+@router.post("/{event_id}/groups/{group_number}/members", response_model=GroupResponse)
+def add_group_member(
+    event_id: str,
+    group_number: int,
+    payload: GroupMemberRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.add_group_member(db, event_id, group_number, payload.profile_id, current_user)
+
+
+@router.delete("/{event_id}/groups/{group_number}/members/{profile_id}", response_model=GroupResponse)
+def remove_group_member(
+    event_id: str,
+    group_number: int,
+    profile_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.remove_group_member(db, event_id, group_number, profile_id, current_user)
 
 
 @router.delete("/{event_id}/applications", response_model=EventResponse)

@@ -11,6 +11,7 @@ struct EventDetailsView: View {
     @State private var errorMessage: String?
     @State private var showsParticipantsManagement = false
     @State private var showsAttendanceConfirmation = false
+    @State private var showsGroupSelection = false
     @State private var showsCancelAlert = false
     @State private var showsDeleteAlert = false
     @State private var showsCancelEventPrompt = false
@@ -125,6 +126,18 @@ struct EventDetailsView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showsGroupSelection) {
+            if let session {
+                EventGroupSelectionView(
+                    event: event,
+                    presentCount: event.presentCount ?? 0,
+                    session: session
+                ) { updatedEvent in
+                    currentEvent = updatedEvent
+                    showMessage(updatedEvent.message ?? "Событие началось")
+                }
+            }
+        }
     }
 
     private var headerView: some View {
@@ -233,7 +246,7 @@ struct EventDetailsView: View {
                     .padding(.top, 22)
             }
 
-            if event.isCreator == true, (isAlmostStarting || isInAttendancePhase), session != nil {
+            if event.isCreator == true, (isAlmostStarting || isInAttendancePhase || isInGroupingPhase), session != nil {
                 organizerStartRow
                     .padding(.top, 22)
             }
@@ -402,13 +415,17 @@ struct EventDetailsView: View {
     private var organizerStartRow: some View {
         HStack(spacing: 10) {
             Button {
-                showsAttendanceConfirmation = true
+                if isInGroupingPhase {
+                    showsGroupSelection = true
+                } else {
+                    showsAttendanceConfirmation = true
+                }
             } label: {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                    Text(isInAttendancePhase ? "Продолжить отметку" : "Начать")
+                    Text(isInGroupingPhase ? "Выбрать группы" : isInAttendancePhase ? "Продолжить отметку" : "Начать")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                 }
@@ -447,6 +464,10 @@ struct EventDetailsView: View {
 
     private var isInAttendancePhase: Bool {
         event.status?.lowercased() == "attendance"
+    }
+
+    private var isInGroupingPhase: Bool {
+        event.status?.lowercased() == "grouping"
     }
 
     private var participationButtonBackground: Color {

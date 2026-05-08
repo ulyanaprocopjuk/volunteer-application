@@ -18,6 +18,15 @@ protocol EventAPIProtocol {
     func fetchEventFeed(searchText: String?, filters: EventFeedFilters, token: String?) async throws -> [EventResponse]
     func fetchAttendance(eventID: String, token: String) async throws -> [AttendanceItem]
     func confirmAttendance(eventID: String, presentApplicationIDs: [Int], token: String) async throws -> EventResponse
+    func saveGroupCountDraft(eventID: String, groupCount: Int, token: String) async throws -> EventResponse
+    func confirmGrouping(eventID: String, groupCount: Int, token: String) async throws -> EventResponse
+    func fetchGroups(eventID: String, token: String) async throws -> [EventGroup]
+    func autoDistribute(eventID: String, token: String) async throws -> [EventGroup]
+    func setGroupLeader(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup
+    func removeGroupLeader(eventID: String, groupNumber: Int, token: String) async throws -> EventGroup
+    func addGroupMember(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup
+    func removeGroupMember(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup
+    func confirmGroups(eventID: String, token: String) async throws -> EventResponse
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -255,6 +264,108 @@ final class EventAPI: EventAPIProtocol {
         let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    func saveGroupCountDraft(eventID: String, groupCount: Int, token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/grouping"))
+        urlRequest.httpMethod = "PATCH"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(["groupCount": groupCount])
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    func confirmGrouping(eventID: String, groupCount: Int, token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/grouping/confirm"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(["groupCount": groupCount])
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    func fetchGroups(eventID: String, token: String) async throws -> [EventGroup] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([EventGroup].self, from: data)
+    }
+
+    func autoDistribute(eventID: String, token: String) async throws -> [EventGroup] {
+        try await postGroupAction(path: "api/events/\(eventID)/groups/auto", token: token)
+    }
+
+    func setGroupLeader(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups/\(groupNumber)/leader"))
+        urlRequest.httpMethod = "PUT"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(["profileID": profileID])
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventGroup.self, from: data)
+    }
+
+    func removeGroupLeader(eventID: String, groupNumber: Int, token: String) async throws -> EventGroup {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups/\(groupNumber)/leader"))
+        urlRequest.httpMethod = "DELETE"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventGroup.self, from: data)
+    }
+
+    func addGroupMember(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups/\(groupNumber)/members"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = try JSONEncoder().encode(["profileID": profileID])
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventGroup.self, from: data)
+    }
+
+    func removeGroupMember(eventID: String, groupNumber: Int, profileID: Int, token: String) async throws -> EventGroup {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups/\(groupNumber)/members/\(profileID)"))
+        urlRequest.httpMethod = "DELETE"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventGroup.self, from: data)
+    }
+
+    func confirmGroups(eventID: String, token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/groups/confirm"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
+    }
+
+    private func postGroupAction(path: String, token: String) async throws -> [EventGroup] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent(path))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([EventGroup].self, from: data)
     }
 
     private func validate(response: URLResponse, data: Data) throws {
