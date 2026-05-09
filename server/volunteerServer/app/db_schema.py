@@ -83,6 +83,14 @@ def ensure_database_schema(engine: Engine) -> None:
                     "ALTER TABLE event_messages ADD COLUMN chat_id INTEGER NOT NULL DEFAULT 0"
                 ))
 
+    if "profiles" in table_names:
+        profile_columns = {col["name"] for col in inspector.get_columns("profiles")}
+        if "rating" not in profile_columns:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "ALTER TABLE profiles ADD COLUMN rating INTEGER NOT NULL DEFAULT 100"
+                ))
+
     if "events" not in table_names:
         return
 

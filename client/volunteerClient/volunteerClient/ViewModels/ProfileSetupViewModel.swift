@@ -91,6 +91,8 @@ final class ProfileSetupViewModel: ObservableObject {
     @Published var organizationCity = ""
     @Published var aboutOrganization = ""
 
+    @Published var rating: Int = 100
+
     @Published var isLoading = false
     @Published var isProfileLoading = false
     @Published var errorMessage: String?
@@ -433,6 +435,7 @@ final class ProfileSetupViewModel: ObservableObject {
         avatarImage = nil
         avatarData = nil
         avatarURL = profile.avatarURL
+        rating = profile.rating ?? 100
 
         let phone = profile.phone ?? ""
         let email = profile.email ?? ""

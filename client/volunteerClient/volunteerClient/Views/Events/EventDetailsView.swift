@@ -18,6 +18,7 @@ struct EventDetailsView: View {
     @State private var showsCancelEventPrompt = false
     @State private var cancelEventReason = ""
     @State private var showsFinishAlert = false
+    @State private var showsRatingView = false
 
     private let eventImageSize: CGFloat = 56
 
@@ -146,6 +147,17 @@ struct EventDetailsView: View {
                     session: session,
                     api: api
                 )
+            }
+        }
+        .fullScreenCover(isPresented: $showsRatingView) {
+            if let session {
+                EventRatingView(
+                    eventID: event.id,
+                    session: session,
+                    api: api
+                ) { updatedEvent in
+                    currentEvent = updatedEvent
+                }
             }
         }
         .alert("Завершить событие?", isPresented: $showsFinishAlert) {
@@ -277,6 +289,11 @@ struct EventDetailsView: View {
             if isActivePhase, session != nil,
                event.isCreator == true || event.userApplicationStatus == "accepted" {
                 chatButton
+                    .padding(.top, 22)
+            }
+
+            if isInRatingPhase, session != nil {
+                ratingButton
                     .padding(.top, 22)
             }
         }
@@ -465,6 +482,30 @@ struct EventDetailsView: View {
         .buttonStyle(.plain)
     }
 
+    private var ratingButton: some View {
+        Button {
+            showsRatingView = true
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                HStack(spacing: 8) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Text("Оценить участников")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var organizerStartRow: some View {
         HStack(spacing: 10) {
             Button {
@@ -563,6 +604,11 @@ struct EventDetailsView: View {
 
     private var isActivePhase: Bool {
         event.status?.lowercased() == "active"
+    }
+
+    private var isInRatingPhase: Bool {
+        let s = event.status?.lowercased() ?? ""
+        return s == "rating" || s == "оценка участников"
     }
 
     private var participationButtonBackground: Color {

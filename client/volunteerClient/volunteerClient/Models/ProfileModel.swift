@@ -22,9 +22,10 @@ struct ProfileResponse: Decodable, Identifiable, Hashable {
     let country: String?
     let skills: [String]?
     let about: String?
+    let rating: Int?
 
     enum CodingKeys: String, CodingKey {
-        case id, type, phone, email, city, country, skills, about
+        case id, type, phone, email, city, country, skills, about, rating
         case userID = "user_id"
         case avatarURL = "avatar_url"
         case firstName = "first_name"

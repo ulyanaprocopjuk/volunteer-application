@@ -106,11 +106,11 @@ def ensure_user(
 ) -> SeedUser:
     try:
         api.post("/auth/register", {"username": username, "email": email, "password": password})
-        print(f"created user: {username}")
+        print(f"  created user: {username}")
     except ApiError as exc:
         if exc.status != 400:
             raise
-        print(f"user exists, reusing: {username}")
+        print(f"  user exists, reusing: {username}")
 
     token = login(api, username, password)
     profile = api.post("/api/profile", profile_payload, token=token)
@@ -151,11 +151,16 @@ def make_event_payload(title: str, volunteers_needed: int, starts_in_hours: int)
     }
 
 
-def create_approved_event(api: ApiClient, organizer_token: str, admin_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+def create_approved_event(
+    api: ApiClient,
+    organizer_token: str,
+    admin_token: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     event = api.post("/api/events", payload, token=organizer_token)
     event_id = event["id"]
     approved = api.post(f"/api/events/{event_id}/approve", token=admin_token)
-    print(f"approved event: {approved['title']} ({event_id})")
+    print(f"  approved event: {approved['title']} ({event_id})")
     return approved
 
 
@@ -167,117 +172,136 @@ def accept_participants(
     participants: list[SeedUser],
 ) -> list[dict[str, Any]]:
     for user in participants:
-        api.post(f"/api/events/{event_id}/applications", token=user.token)
+        try:
+            api.post(f"/api/events/{event_id}/applications", token=user.token)
+        except ApiError as exc:
+            if exc.status not in (400, 409):
+                raise
 
     applications = api.get(f"/api/events/{event_id}/applications", token=organizer_token)
     by_profile_id = {item["profile"]["id"]: item for item in applications}
 
-    accepted: list[dict[str, Any]] = []
     for user in participants:
-        application = by_profile_id[user.profile_id]
-        if application["status"] != "accepted":
-            api.post(f"/api/events/applications/{application['application_id']}/accept", token=organizer_token)
-        accepted.append(application)
+        application = by_profile_id.get(user.profile_id)
+        if application is None:
+            continue
+        if application["status"] not in ("accepted",):
+            try:
+                api.post(
+                    f"/api/events/applications/{application['application_id']}/accept",
+                    token=organizer_token,
+                )
+            except ApiError as exc:
+                if exc.status not in (400, 409):
+                    raise
 
     applications = api.get(f"/api/events/{event_id}/applications", token=organizer_token)
     accepted_count = sum(1 for item in applications if item["status"] == "accepted")
-    print(f"accepted applications for {event_id}: {accepted_count}")
+    print(f"  accepted: {accepted_count} participants")
     return applications
 
 
-def move_to_grouping(api: ApiClient, *, event_id: str, organizer_token: str) -> list[dict[str, Any]]:
-    api.post(f"/api/events/{event_id}/start", token=organizer_token)
+def move_to_grouping(
+    api: ApiClient,
+    *,
+    event_id: str,
+    organizer_token: str,
+) -> list[dict[str, Any]]:
+    # Start event → attendance phase
+    try:
+        api.post(f"/api/events/{event_id}/start", token=organizer_token)
+    except ApiError as exc:
+        # Already started (attendance or grouping)
+        if exc.status not in (400,):
+            raise
+
     attendance = api.get(f"/api/events/{event_id}/attendance", token=organizer_token)
     present_ids = [item["application_id"] for item in attendance]
+
     event = api.post(
         f"/api/events/{event_id}/attendance/confirm",
         {"presentApplicationIDs": present_ids},
         token=organizer_token,
     )
-    print(f"attendance confirmed for {event_id}: present={len(present_ids)}, status={event['status']}")
+    print(f"  attendance confirmed: {len(present_ids)} present, status={event['status']}")
     return attendance
 
 
-def smoke_test_chats(
+def create_active_scene(
     api: ApiClient,
     *,
     organizer: SeedUser,
     admin_token: str,
     participants: list[SeedUser],
-) -> None:
-    chat_participants = participants[:6]
+    group_count: int,
+) -> dict[str, Any]:
+    """Create a fully active event with groups confirmed — ready for chat testing from iOS."""
+    print("\n[active scene] creating event...")
     event = create_approved_event(
         api,
         organizer.token,
         admin_token,
-        make_event_payload("Seed: проверка чатов", volunteers_needed=len(chat_participants) + 1, starts_in_hours=2),
+        make_event_payload(
+            "Seed: активное событие (чаты)",
+            volunteers_needed=len(participants) + 1,
+            starts_in_hours=2,
+        ),
     )
     event_id = event["id"]
 
+    print("[active scene] accepting participants...")
     accept_participants(
         api,
         event_id=event_id,
         organizer_token=organizer.token,
-        participants=chat_participants,
+        participants=participants,
     )
+
+    print("[active scene] moving to grouping...")
     move_to_grouping(api, event_id=event_id, organizer_token=organizer.token)
-    api.post(f"/api/events/{event_id}/grouping/confirm", {"groupCount": 2}, token=organizer.token)
-    groups = api.post(f"/api/events/{event_id}/groups/auto", token=organizer.token)
+
+    print(f"[active scene] confirming {group_count} groups and auto-distributing...")
+    api.post(
+        f"/api/events/{event_id}/grouping/confirm",
+        {"groupCount": group_count},
+        token=organizer.token,
+    )
+    api.post(f"/api/events/{event_id}/groups/auto", token=organizer.token)
+
+    print("[active scene] confirming groups → event goes active...")
     api.post(f"/api/events/{event_id}/groups/confirm", token=organizer.token)
 
     groups = api.get(f"/api/events/{event_id}/groups", token=organizer.token)
-    leader_profile_id = groups[0]["leader_id"]
-    member_profile_id = groups[0]["members"][0]["profile_id"] if groups[0]["members"] else groups[1]["leader_id"]
 
-    leader = next(user for user in chat_participants if user.profile_id == leader_profile_id)
-    member = next(user for user in chat_participants if user.profile_id == member_profile_id)
+    # Build profile_id → SeedUser map for readable output
+    by_profile_id: dict[int, SeedUser] = {u.profile_id: u for u in participants}
 
-    organizer_chats = api.get(f"/api/events/{event_id}/chats", token=organizer.token)
-    leader_chats = api.get(f"/api/events/{event_id}/chats", token=leader.token)
-    member_chats = api.get(f"/api/events/{event_id}/chats", token=member.token)
+    group_info: list[dict[str, Any]] = []
+    for group in groups:
+        leader_id = group["leader_id"]
+        leader_user = by_profile_id.get(leader_id)
+        member_users = [
+            by_profile_id[m["profile_id"]]
+            for m in group["members"]
+            if m["profile_id"] in by_profile_id
+        ]
+        group_info.append({
+            "number": group["group_number"],
+            "leader": leader_user,
+            "members": member_users,
+        })
 
-    api.post(
-        f"/api/events/{event_id}/chats/{LEADERS_CHAT_ID}/messages",
-        {"content": "Организатор: проверка чата лидеров."},
-        token=organizer.token,
-    )
-    api.post(
-        f"/api/events/{event_id}/chats/{LEADERS_CHAT_ID}/messages",
-        {"content": "Лидер: сообщение получено."},
-        token=leader.token,
-    )
-
-    group_chat_id = groups[0]["group_number"]
-    api.post(
-        f"/api/events/{event_id}/chats/{group_chat_id}/messages",
-        {"content": "Лидер: проверка группового чата."},
-        token=leader.token,
-    )
-    api.post(
-        f"/api/events/{event_id}/chats/{group_chat_id}/messages",
-        {"content": "Участник: вижу групповой чат."},
-        token=member.token,
-    )
-
-    leaders_messages = api.get(f"/api/events/{event_id}/chats/{LEADERS_CHAT_ID}/messages", token=organizer.token)
-    group_messages = api.get(f"/api/events/{event_id}/chats/{group_chat_id}/messages", token=member.token)
-
-    print("chat smoke test:")
-    print(f"  event_id: {event_id}")
-    print(f"  organizer chats: {[chat['title'] for chat in organizer_chats]}")
-    print(f"  leader chats: {[chat['title'] for chat in leader_chats]}")
-    print(f"  member chats: {[chat['title'] for chat in member_chats]}")
-    print(f"  leaders chat messages: {len(leaders_messages)}")
-    print(f"  group chat messages: {len(group_messages)}")
+    return {"event_id": event_id, "groups": group_info}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Seed a grouping-ready event scene through the HTTP API.")
+    parser = argparse.ArgumentParser(description="Seed grouping + active event scenes through the HTTP API.")
     parser.add_argument("--base-url", default=os.getenv("VOLUNTEER_API_BASE_URL", DEFAULT_BASE_URL))
     parser.add_argument("--prefix", default="seed-grouping")
     parser.add_argument("--password", default=DEFAULT_PASSWORD)
     parser.add_argument("--participants", type=int, default=20)
-    parser.add_argument("--skip-chat-test", action="store_true")
+    parser.add_argument("--group-count", type=int, default=3, help="Number of groups in the active scene")
+    parser.add_argument("--skip-active", action="store_true", help="Only create the grouping scene, skip active scene")
     parser.add_argument("--admin-username")
     parser.add_argument("--admin-password")
     return parser.parse_args()
@@ -288,14 +312,20 @@ def main() -> int:
     if args.participants < 4:
         print("--participants must be at least 4 to reach grouping status", file=sys.stderr)
         return 2
+    if args.group_count < 2:
+        print("--group-count must be at least 2 (to get multiple chats)", file=sys.stderr)
+        return 2
 
     env = load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     admin_username = args.admin_username or env.get("DEFAULT_ADMIN_USERNAME") or "admin"
     admin_password = args.admin_password or env.get("DEFAULT_ADMIN_PASSWORD") or "Admin12345!"
 
     api = ApiClient(args.base_url)
+    print(f"logging in as admin ({admin_username})...")
     admin_token = login(api, admin_username, admin_password)
 
+    # ── Organizer ──────────────────────────────────────────────────────────────
+    print("\n[users] ensuring organizer...")
     organizer_email = f"{args.prefix}.organizer@volunteer-seed.com"
     organizer = ensure_user(
         api,
@@ -316,6 +346,8 @@ def main() -> int:
         },
     )
 
+    # ── Participants ───────────────────────────────────────────────────────────
+    print(f"\n[users] ensuring {args.participants} participants...")
     users: list[SeedUser] = []
     for index in range(1, args.participants + 1):
         email = f"{args.prefix}.participant{index:02d}@volunteer-seed.com"
@@ -329,6 +361,8 @@ def main() -> int:
             )
         )
 
+    # ── Scene A: grouping event (organizer assigns groups from iOS) ────────────
+    print("\n[scene A] creating grouping event...")
     grouping_event = create_approved_event(
         api,
         organizer.token,
@@ -339,24 +373,78 @@ def main() -> int:
             starts_in_hours=1,
         ),
     )
-    event_id = grouping_event["id"]
-    accept_participants(api, event_id=event_id, organizer_token=organizer.token, participants=users)
-    attendance = move_to_grouping(api, event_id=event_id, organizer_token=organizer.token)
-    final_event = api.get(f"/api/events/{event_id}", token=organizer.token)
+    grouping_event_id = grouping_event["id"]
+    print("[scene A] accepting participants...")
+    accept_participants(
+        api,
+        event_id=grouping_event_id,
+        organizer_token=organizer.token,
+        participants=users,
+    )
+    print("[scene A] moving to grouping phase...")
+    move_to_grouping(api, event_id=grouping_event_id, organizer_token=organizer.token)
+    final_grouping = api.get(f"/api/events/{grouping_event_id}", token=organizer.token)
 
-    if not args.skip_chat_test:
-        smoke_test_chats(api, organizer=organizer, admin_token=admin_token, participants=users)
+    # ── Scene B: active event with groups confirmed (participants see chats) ───
+    active_info: dict[str, Any] | None = None
+    if not args.skip_active:
+        active_info = create_active_scene(
+            api,
+            organizer=organizer,
+            admin_token=admin_token,
+            participants=users,
+            group_count=args.group_count,
+        )
 
-    print("")
-    print("grouping scene ready:")
-    print(f"  event_id: {event_id}")
-    print(f"  title: {final_event['title']}")
-    print(f"  status: {final_event['status']}")
-    print(f"  organizer username: {organizer.username}")
-    print(f"  participant usernames: {users[0].username} ... {users[-1].username}")
-    print(f"  password for seeded users: {args.password}")
-    print(f"  accepted participants excluding organizer: {len(users)}")
-    print(f"  present attendance records: {len(attendance)}")
+    # ── Summary ────────────────────────────────────────────────────────────────
+    pw = args.password
+    sep = "─" * 60
+
+    print(f"\n{sep}")
+    print("SEED COMPLETE")
+    print(sep)
+    print(f"password for all seeded accounts: {pw}")
+    print()
+
+    print("SCENE A — grouping (organizer assigns groups from iOS)")
+    print(f"  event_id : {grouping_event_id}")
+    print(f"  status   : {final_grouping['status']}")
+    print(f"  login as organizer → assign groups, then confirm")
+    print(f"  organizer: {organizer.username} / {pw}")
+    print()
+
+    if active_info:
+        print("SCENE B — active event (participants see chat banner)")
+        print(f"  event_id : {active_info['event_id']}")
+        print(f"  status   : active")
+        print()
+        for g in active_info["groups"]:
+            n = g["number"]
+            leader = g["leader"]
+            members = g["members"]
+            leader_line = f"{leader.username} / {pw}" if leader else "(none)"
+            member_lines = ", ".join(u.username for u in members) if members else "(none)"
+            print(f"  group {n}:")
+            print(f"    leader  → {leader_line}")
+            print(f"             sees: чат группы {n} + чат лидеров")
+            if members:
+                print(f"    members → {member_lines}")
+                print(f"             see:  чат группы {n} only")
+        print()
+        print("  organizer sees: чат лидеров only")
+        print(f"  organizer: {organizer.username} / {pw}")
+        print()
+        print("  iOS test scenarios:")
+        groups = active_info["groups"]
+        if groups:
+            g1 = groups[0]
+            if g1["leader"]:
+                print(f"    → banner + leader chat: log in as {g1['leader'].username}")
+            if g1["members"]:
+                print(f"    → banner + group chat:  log in as {g1['members'][0].username}")
+        print(f"    → organizer view:       log in as {organizer.username}")
+
+    print(sep)
     return 0
 
 

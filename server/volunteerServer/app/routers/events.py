@@ -20,8 +20,10 @@ from app.schemas import (
     GroupMemberRequest,
     GroupResponse,
     MessageResponse,
+    RatableProfileResponse,
     RemoveEventParticipantRequest,
     SendMessageRequest,
+    SubmitRatingsRequest,
 )
 from app.services.events_service import event_service
 
@@ -371,3 +373,22 @@ def get_event(
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
     return event
+
+
+@router.get("/{event_id}/ratings", response_model=list[RatableProfileResponse])
+def get_ratable_profiles(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.get_ratable_profiles(db, event_id, current_user)
+
+
+@router.post("/{event_id}/ratings", response_model=EventResponse)
+def submit_ratings(
+    event_id: str,
+    payload: SubmitRatingsRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.submit_ratings(db, event_id, current_user, payload.ratings)

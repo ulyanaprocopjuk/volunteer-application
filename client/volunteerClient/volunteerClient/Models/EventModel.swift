@@ -386,6 +386,8 @@ enum EventModerationStatus {
             || value.contains("active")
             || value.contains("attendance")
             || value.contains("grouping")
+            || value.contains("rating")
+            || value.contains("оценка")
             || value.contains("актив")
             || value.contains("published")
             || value.contains("подтверж") {
@@ -402,4 +404,41 @@ enum EventModerationStatus {
             self = .pending
         }
     }
+}
+
+struct RatableProfile: Decodable, Identifiable, Hashable {
+    let profileID: Int
+    let firstName: String?
+    let lastName: String?
+    let avatarURL: String?
+    let currentRating: Int
+
+    var id: Int { profileID }
+
+    var displayName: String {
+        let parts = [firstName, lastName].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return parts.isEmpty ? "Волонтёр" : parts.joined(separator: " ")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case profileID = "profile_id"
+        case firstName = "first_name"
+        case lastName = "last_name"
+        case avatarURL = "avatar_url"
+        case currentRating = "current_rating"
+    }
+}
+
+struct RatingItem: Encodable {
+    let profileID: Int
+    let score: Int
+
+    enum CodingKeys: String, CodingKey {
+        case profileID = "profile_id"
+        case score
+    }
+}
+
+struct SubmitRatingsRequest: Encodable {
+    let ratings: [RatingItem]
 }

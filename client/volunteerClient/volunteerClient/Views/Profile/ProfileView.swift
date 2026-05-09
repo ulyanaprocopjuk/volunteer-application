@@ -72,9 +72,11 @@ struct ProfileView: View {
                 avatarSection
                     .padding(.top, 24)
 
-                pointsCard
-                    .padding(.top, 18)
-                    .padding(.horizontal, 24)
+                if model.isVolunteer {
+                    ratingCard
+                        .padding(.top, 18)
+                        .padding(.horizontal, 24)
+                }
 
                 VStack(alignment: .leading, spacing: 22) {
                     if model.isVolunteer {
@@ -218,32 +220,43 @@ struct ProfileView: View {
         return baseURL.appendingPathComponent(path)
     }
 
-    private var pointsCard: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Очки")
-                    .font(.system(size: 14, weight: .medium))
+    private var ratingCard: some View {
+        let navy = Color(red: 44/255, green: 67/255, blue: 102/255)
+        let r = model.rating
+        let (levelName, levelColor): (String, Color) = {
+            switch r {
+            case 80...: return ("Надёжный", Color(red: 0.2, green: 0.7, blue: 0.4))
+            case 50..<80: return ("Хороший", Color(red: 0.3, green: 0.6, blue: 0.9))
+            case 20..<50: return ("Средний", Color(red: 1.0, green: 0.65, blue: 0.0))
+            default: return ("Низкий", Color(red: 0.85, green: 0.2, blue: 0.2))
+            }
+        }()
+
+        return HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Ваш текущий рейтинг")
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.gray)
 
-                Text("1 250")
-                    .font(.system(size: 24, weight: .bold))
+                Text("\(r)")
+                    .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.black)
 
-                Text("Ваш рейтинг будет расти за активность")
-                    .font(.system(size: 13))
-                    .foregroundColor(.gray)
+                Text(levelName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(levelColor)
             }
 
             Spacer()
 
             ZStack {
                 Circle()
-                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.12))
+                    .fill(navy.opacity(0.12))
                     .frame(width: 52, height: 52)
 
                 Image(systemName: "star.fill")
                     .font(.system(size: 22))
-                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .foregroundColor(navy)
             }
         }
         .padding(.horizontal, 18)

@@ -7,6 +7,7 @@ from .event_attendance import EventAttendance
 from .event_group import EventGroup, EventGroupMember
 from .event_message import EventMessage
 from .event_admin_message import EventAdminMessage
+from .event_rating import EventRating
 from .notification import Notification
 from .password_reset_token import PasswordResetToken
 from .profile import Profile, ProfileType
@@ -32,6 +33,7 @@ __all__ = [
     "EventGroupMember",
     "EventMessage",
     "EventAdminMessage",
+    "EventRating",
     "Notification",
     "EmailVerificationCode",
     "PasswordResetToken",

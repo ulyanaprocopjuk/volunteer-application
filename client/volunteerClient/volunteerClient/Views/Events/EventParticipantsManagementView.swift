@@ -1379,8 +1379,10 @@ private struct EventSingleGroupEditView: View {
         self.onDone = onDone
     }
 
-    private var maxGroups: Int { presentProfiles.count / 2 }
-    private var canAddGroup: Bool { allGroups.count < maxGroups }
+    private var canAddGroup: Bool {
+        let emptyGroups = allGroups.filter { $0.leaderID == nil && $0.members.isEmpty }.count
+        return unassignedProfiles.count >= 2 * (emptyGroups + 1)
+    }
 
     private var currentGroup: EventGroup? {
         guard currentGroupIndex < allGroups.count else { return nil }
@@ -1440,6 +1442,21 @@ private struct EventSingleGroupEditView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.white.ignoresSafeArea())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 30, coordinateSpace: .local)
+                .onEnded { value in
+                    let h = value.translation.width
+                    let v = value.translation.height
+                    guard abs(h) > abs(v) * 1.5, abs(h) > 40 else { return }
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        if h < 0 {
+                            currentGroupIndex = min(currentGroupIndex + 1, allGroups.count - 1)
+                        } else {
+                            currentGroupIndex = max(currentGroupIndex - 1, 0)
+                        }
+                    }
+                }
+        )
         .safeAreaInset(edge: .bottom) {
             confirmButton
                 .padding(.horizontal, 20)
@@ -1903,29 +1920,19 @@ private struct EventSingleGroupEditView: View {
     @ViewBuilder
     private var autoFillSheet: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button {
-                    showsAutoSheet = false
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.black.opacity(0.6))
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
+            ZStack {
                 Text("Автозаполнение")
                     .font(.system(size: 17, weight: .semibold, design: .serif))
                     .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                Spacer()
-
-                Button("Отмена") {
-                    showsAutoSheet = false
+                HStack {
+                    Spacer()
+                    Button("Отмена") {
+                        showsAutoSheet = false
+                    }
+                    .font(.system(size: 15))
+                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                 }
-                .font(.system(size: 15))
-                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -2230,13 +2237,13 @@ struct EventChatView: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
             }
+            .defaultScrollAnchor(.bottom)
             .onChange(of: messages) { _, newMessages in
                 if let lastID = newMessages.last?.id {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(lastID, anchor: .bottom)
-                    }
+                    proxy.scrollTo(lastID, anchor: .bottom)
                 }
             }
         }

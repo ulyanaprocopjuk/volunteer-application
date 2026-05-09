@@ -23,8 +23,11 @@ from .events import (
     GroupMemberResponse,
     GroupResponse,
     MessageResponse,
+    RatableProfileResponse,
+    RatingItem,
     RemoveEventParticipantRequest,
     SendMessageRequest,
+    SubmitRatingsRequest,
 )
 from .geocoding import ForwardGeocodeResponse, GeocodingSuggestionResponse, ReverseGeocodeResponse
 from .notifications import NotificationResponse
@@ -59,6 +62,9 @@ __all__ = [
     "MessageResponse",
     "SendMessageRequest",
     "CurrentCountryEventResponse",
+    "RatableProfileResponse",
+    "RatingItem",
+    "SubmitRatingsRequest",
     "NotificationResponse",
     "GeocodingSuggestionResponse",
     "ForwardGeocodeResponse",

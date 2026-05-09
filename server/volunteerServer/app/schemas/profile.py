@@ -82,3 +82,4 @@ class ProfileResponse(BaseModel):
     country: str
     skills: list[str]
     about: str | None
+    rating: int

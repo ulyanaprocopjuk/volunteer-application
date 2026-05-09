@@ -6,7 +6,7 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import and_, false, func, or_, select, true, update
 from sqlalchemy.orm import Session
 
-from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, EventGroup, EventGroupMember, EventMessage, Profile, ProfileType, User
+from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, EventGroup, EventGroupMember, EventMessage, EventRating, Profile, ProfileType, User
 from app.schemas import (
     AttendanceItemResponse,
     ChatRoomResponse,
@@ -19,6 +19,9 @@ from app.schemas import (
     GroupMemberResponse,
     GroupResponse,
     MessageResponse,
+    RatableProfileResponse,
+    RatingItem,
+    SubmitRatingsRequest,
 )
 
 LEADERS_CHAT_ID = 9999
@@ -149,7 +152,7 @@ class EventService:
 
         if normalized_filter == "active":
             query = query.where(
-                func.lower(Event.status).in_(("approved", "active", "attendance", "grouping")),
+                func.lower(Event.status).in_(("approved", "active", "attendance", "grouping", "rating")),
                 event_end >= comparison_time,
             )
         elif normalized_filter == "history":
@@ -466,7 +469,7 @@ class EventService:
         if (event.status or "").strip().lower() != "active":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only active events can be finished")
 
-        event.status = "completed"
+        event.status = "rating"
 
         accepted_applications = db.scalars(
             select(EventApplication).where(
@@ -481,14 +484,14 @@ class EventService:
                 notification_service.create(
                     db,
                     application.volunteer.user_id,
-                    f"Событие «{event_title}» завершено.",
+                    f"Событие «{event_title}» завершено. Оцените участников.",
                     event_id=event.id,
                 )
 
         db.commit()
         db.refresh(event)
         response = self._response(db, event, user)
-        response.message = "Событие завершено"
+        response.message = "Оцените участников события"
         return response
 
     def get_attendance(self, db: Session, event_id: str, user: User) -> list[AttendanceItemResponse]:
@@ -543,6 +546,10 @@ class EventService:
         for record in attendance_records:
             record.is_present = record.application_id in present_set
             record.checked_at = now
+            if record.application_id not in present_set:
+                application = db.get(EventApplication, record.application_id)
+                if application is not None:
+                    self._adjust_rating(application.volunteer, -50)
 
         present_count = len(present_set)
         event.present_count = present_count
@@ -994,13 +1001,24 @@ class EventService:
         if application is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
-        if application.status != EventApplicationStatus.pending:
+        if application.status not in (EventApplicationStatus.pending, EventApplicationStatus.accepted):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only pending applications can be cancelled",
+                detail="Only pending or accepted applications can be cancelled",
             )
 
+        was_accepted = application.status == EventApplicationStatus.accepted
         application.status = EventApplicationStatus.cancelled
+
+        if was_accepted:
+            now = datetime.now(UTC)
+            starts_at = event.starts_at
+            if starts_at is not None and starts_at.tzinfo is None:
+                starts_at = starts_at.replace(tzinfo=UTC)
+            hours_until = (starts_at - now).total_seconds() / 3600 if starts_at else None
+            penalty = -30 if (hours_until is not None and hours_until < 6) else -10
+            self._adjust_rating(profile, penalty)
+
         db.commit()
         db.refresh(event)
 
@@ -1073,6 +1091,126 @@ class EventService:
         response = self._response(db, event, user)
         response.message = "Участник удалён"
         return response
+
+    def get_ratable_profiles(self, db: Session, event_id: str, user: User) -> list[RatableProfileResponse]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if (event.status or "").strip().lower() != "rating":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in rating phase")
+
+        profile = self._profile_for_user(db, user)
+        is_organizer = event.creator_id == user.id
+
+        if is_organizer:
+            # Organizer rates all accepted participants
+            applications = db.scalars(
+                select(EventApplication).where(
+                    EventApplication.event_id == event_id,
+                    EventApplication.status == EventApplicationStatus.accepted,
+                )
+            ).all()
+            profiles = [a.volunteer for a in applications if a.volunteer.id != profile.id]
+        else:
+            # Leader rates members of own group; member has no one to rate
+            group_member = db.scalar(
+                select(EventGroupMember).where(
+                    EventGroupMember.profile_id == profile.id,
+                ).join(EventGroup, EventGroupMember.group_id == EventGroup.id).where(
+                    EventGroup.event_id == event_id
+                )
+            )
+            if group_member is None:
+                return []
+            group = db.get(EventGroup, group_member.group_id)
+            if group is None or group.leader_id != profile.id:
+                return []
+            # Leader rates all non-leader members
+            member_rows = db.scalars(
+                select(EventGroupMember).where(
+                    EventGroupMember.group_id == group.id,
+                    EventGroupMember.profile_id != profile.id,
+                )
+            ).all()
+            profiles = [db.get(Profile, m.profile_id) for m in member_rows]
+            profiles = [p for p in profiles if p is not None]
+
+        # Exclude already rated
+        already_rated = {
+            row.rated_id
+            for row in db.scalars(
+                select(EventRating).where(
+                    EventRating.event_id == event_id,
+                    EventRating.rater_id == profile.id,
+                )
+            ).all()
+        }
+
+        return [
+            RatableProfileResponse(
+                profile_id=p.id,
+                first_name=p.first_name,
+                last_name=p.last_name,
+                avatar_url=p.avatar_url,
+                current_rating=p.rating,
+            )
+            for p in profiles
+            if p.id not in already_rated
+        ]
+
+    def submit_ratings(self, db: Session, event_id: str, user: User, ratings: list[RatingItem]) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if (event.status or "").strip().lower() != "rating":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in rating phase")
+
+        profile = self._profile_for_user(db, user)
+        is_organizer = event.creator_id == user.id
+
+        for item in ratings:
+            if item.score % 10 != 0 or not (-50 <= item.score <= 50):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Score must be a multiple of 10 between -50 and 50")
+            rated_profile = db.get(Profile, item.profile_id)
+            if rated_profile is None:
+                continue
+            existing = db.scalar(
+                select(EventRating).where(
+                    EventRating.event_id == event_id,
+                    EventRating.rater_id == profile.id,
+                    EventRating.rated_id == item.profile_id,
+                )
+            )
+            if existing is not None:
+                continue
+            rating_record = EventRating(
+                event_id=event_id,
+                rater_id=profile.id,
+                rated_id=item.profile_id,
+                score=item.score,
+            )
+            db.add(rating_record)
+            self._adjust_rating(rated_profile, item.score)
+
+        if is_organizer:
+            event.status = "completed"
+            db.commit()
+            db.refresh(event)
+            response = self._response(db, event, user)
+            response.message = "Оценки сохранены. Событие завершено."
+        else:
+            db.commit()
+            db.refresh(event)
+            response = self._response(db, event, user)
+            response.message = "Оценки сохранены"
+
+        return response
+
+    @staticmethod
+    def _adjust_rating(profile: Profile, delta: int) -> None:
+        profile.rating = max(0, profile.rating + delta)
 
     def list_events_for_current_user_country(
         self,

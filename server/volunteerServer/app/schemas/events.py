@@ -81,6 +81,7 @@ class EventResponse(BaseModel):
             "attendance": "attendance",
             "rejected": "Отклонено",
             "cancelled": "Отменено",
+            "rating": "Оценка участников",
             "completed": "Завершено",
         }.get(value.lower(), value)
 
@@ -217,3 +218,22 @@ class CurrentCountryEventResponse(BaseModel):
     latitude: float
     longitude: float
     address: str
+
+
+class RatableProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    profile_id: int
+    first_name: str | None
+    last_name: str | None
+    avatar_url: str | None
+    current_rating: int
+
+
+class RatingItem(BaseModel):
+    profile_id: int
+    score: int
+
+
+class SubmitRatingsRequest(BaseModel):
+    ratings: list[RatingItem]

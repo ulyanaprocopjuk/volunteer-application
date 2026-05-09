@@ -36,6 +36,8 @@ protocol EventAPIProtocol {
     func fetchChatMessages(eventID: String, chatID: Int, token: String) async throws -> [ChatMessage]
     func sendChatMessage(eventID: String, chatID: Int, content: String?, photoURL: String?, token: String) async throws -> ChatMessage
     func finishEvent(id: String, token: String) async throws -> EventResponse
+    func fetchRatableProfiles(eventID: String, token: String) async throws -> [RatableProfile]
+    func submitRatings(eventID: String, ratings: [RatingItem], token: String) async throws -> EventResponse
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -468,6 +470,26 @@ final class EventAPI: EventAPIProtocol {
 
     func finishEvent(id: String, token: String) async throws -> EventResponse {
         try await postEventAction(path: "api/events/\(id)/finish", token: token)
+    }
+
+    func fetchRatableProfiles(eventID: String, token: String) async throws -> [RatableProfile] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/ratings"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([RatableProfile].self, from: data)
+    }
+
+    func submitRatings(eventID: String, ratings: [RatingItem], token: String) async throws -> EventResponse {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/ratings"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = try JSONEncoder().encode(SubmitRatingsRequest(ratings: ratings))
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(EventResponse.self, from: data)
     }
 
     private func postGroupAction(path: String, token: String) async throws -> [EventGroup] {
