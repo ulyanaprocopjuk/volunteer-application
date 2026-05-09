@@ -181,6 +181,8 @@ class MessageResponse(BaseModel):
     photo_url: Optional[str] = None
     created_at: datetime
     is_organizer: bool = False
+    is_leader: bool = False
+    leader_label: Optional[str] = None
     profile: ProfileResponse
 
 
@@ -195,6 +197,16 @@ class SendMessageRequest(BaseModel):
         if not self.content and not self.photo_url:
             raise ValueError("Message must have content or a photo")
         return self
+
+
+class ChatRoomResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    event_id: str
+    type: str
+    group_number: Optional[int] = None
+    title: str
 
 
 class CurrentCountryEventResponse(BaseModel):

@@ -75,6 +75,14 @@ def ensure_database_schema(engine: Engine) -> None:
                     )
                 )
 
+    if "event_messages" in table_names:
+        msg_columns = {col["name"] for col in inspector.get_columns("event_messages")}
+        if "chat_id" not in msg_columns:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "ALTER TABLE event_messages ADD COLUMN chat_id INTEGER NOT NULL DEFAULT 0"
+                ))
+
     if "events" not in table_names:
         return
 

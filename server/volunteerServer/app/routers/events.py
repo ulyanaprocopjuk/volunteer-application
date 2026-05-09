@@ -9,6 +9,7 @@ from app.models import User
 from app.schemas import (
     AttendanceItemResponse,
     CancelEventRequest,
+    ChatRoomResponse,
     ConfirmAttendanceRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
@@ -54,6 +55,15 @@ def delete_event(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     event_service.delete_event(db, event_id, current_user)
+
+
+@router.post("/{event_id}/finish", response_model=EventResponse)
+def finish_event(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.finish_event(db, event_id, current_user)
 
 
 @router.post("/{event_id}/start", response_model=EventResponse)
@@ -265,6 +275,36 @@ def send_event_message(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     return event_service.send_message(db, event_id, current_user, payload.content, payload.photo_url)
+
+
+@router.get("/{event_id}/chats", response_model=list[ChatRoomResponse])
+def list_event_chats(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.get_chats(db, event_id, current_user)
+
+
+@router.get("/{event_id}/chats/{chat_id}/messages", response_model=list[MessageResponse])
+def list_chat_messages(
+    event_id: str,
+    chat_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.get_chat_messages(db, event_id, chat_id, current_user)
+
+
+@router.post("/{event_id}/chats/{chat_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+def send_chat_message(
+    event_id: str,
+    chat_id: int,
+    payload: SendMessageRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.send_chat_message(db, event_id, chat_id, current_user, payload.content, payload.photo_url)
 
 
 @router.get("/my", response_model=list[EventResponse])

@@ -18,6 +18,7 @@ struct HomePageView: View {
     @State private var isEventFormPresented = false
     @State private var isNotificationsPresented = false
     @State private var showModerationMessage = false
+    @State private var selectedActiveEvent: EventResponse?
 
     init(session: AppSession) {
         self.session = session
@@ -51,6 +52,18 @@ struct HomePageView: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .ignoresSafeArea(.keyboard, edges: .bottom)
             .background(Color(.systemGray6).ignoresSafeArea())
+            .overlay(alignment: .bottom) {
+                if let event = activeEvent {
+                    ActiveEventBanner(event: event) {
+                        selectedActiveEvent = event
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 94)
+                }
+            }
+            .fullScreenCover(item: $selectedActiveEvent) { event in
+                EventDetailsView(event: event, session: session)
+            }
             .task {
                 await profileModel.loadMyProfileIfNeeded()
                 await notificationModel.loadNotifications()
@@ -135,6 +148,18 @@ struct HomePageView: View {
         }
     }
 
+    private var activeEvent: EventResponse? {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        return myEventsModel.events.first { event in
+            guard event.status?.lowercased() == "active" else { return false }
+            let end = event.endsAt.flatMap { isoFormatter.date(from: $0) }
+                ?? isoFormatter.date(from: event.startsAt)
+                ?? Date.distantPast
+            return end > Date()
+        }
+    }
+
     private func presentModerationMessage() {
         showModerationMessage = true
 
@@ -144,6 +169,52 @@ struct HomePageView: View {
                 showModerationMessage = false
             }
         }
+    }
+}
+
+private struct ActiveEventBanner: View {
+    let event: EventResponse
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.green.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 11, height: 11)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Событие идёт сейчас")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.white.opacity(0.72))
+
+                    let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    Text(title.isEmpty ? "Без названия" : title)
+                        .font(.system(size: 14, weight: .semibold, design: .serif))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.65))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

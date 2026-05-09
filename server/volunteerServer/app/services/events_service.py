@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, EventGroup, EventGroupMember, EventMessage, Profile, ProfileType, User
 from app.schemas import (
     AttendanceItemResponse,
+    ChatRoomResponse,
     ConfirmAttendanceRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
@@ -19,6 +20,9 @@ from app.schemas import (
     GroupResponse,
     MessageResponse,
 )
+
+LEADERS_CHAT_ID = 9999
+_GROUP_EDIT_STATUSES = {"grouping", "active"}
 from app.services.geocoding_service import COUNTRY_ALIASES
 from app.services.location_display import build_location_display
 from app.services.notification_service import notification_service
@@ -432,6 +436,42 @@ class EventService:
         response.message = "Отметьте присутствующих"
         return response
 
+    def finish_event(self, db: Session, event_id: str, user: User) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if event.creator_id != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can finish event")
+
+        if (event.status or "").strip().lower() != "active":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only active events can be finished")
+
+        event.status = "completed"
+
+        accepted_applications = db.scalars(
+            select(EventApplication).where(
+                EventApplication.event_id == event.id,
+                EventApplication.status == EventApplicationStatus.accepted,
+            )
+        ).all()
+
+        event_title = event.title.strip() or "событие"
+        for application in accepted_applications:
+            if application.volunteer.user_id != user.id:
+                notification_service.create(
+                    db,
+                    application.volunteer.user_id,
+                    f"Событие «{event_title}» завершено.",
+                    event_id=event.id,
+                )
+
+        db.commit()
+        db.refresh(event)
+        response = self._response(db, event, user)
+        response.message = "Событие завершено"
+        return response
+
     def get_attendance(self, db: Session, event_id: str, user: User) -> list[AttendanceItemResponse]:
         event = self.get_event(db, event_id)
         if event is None:
@@ -568,8 +608,8 @@ class EventService:
         if event.creator_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can view groups")
 
-        if (event.status or "").strip().lower() != "grouping":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+        if (event.status or "").strip().lower() not in _GROUP_EDIT_STATUSES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping or active phase")
 
         groups = db.scalars(
             select(EventGroup).where(EventGroup.event_id == event_id).order_by(EventGroup.group_number)
@@ -639,8 +679,8 @@ class EventService:
         if event.creator_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can auto-distribute")
 
-        if (event.status or "").strip().lower() != "grouping":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+        if (event.status or "").strip().lower() not in _GROUP_EDIT_STATUSES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping or active phase")
 
         groups = db.scalars(
             select(EventGroup).where(EventGroup.event_id == event_id).order_by(EventGroup.group_number)
@@ -652,7 +692,7 @@ class EventService:
         attendance_records = db.scalars(
             select(EventAttendance).where(
                 EventAttendance.event_id == event_id,
-                EventAttendance.is_present == True,
+                EventAttendance.is_present == true(),
             )
         ).all()
 
@@ -692,8 +732,8 @@ class EventService:
         if event.creator_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can add groups")
 
-        if (event.status or "").strip().lower() != "grouping":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+        if (event.status or "").strip().lower() not in _GROUP_EDIT_STATUSES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping or active phase")
 
         max_number = db.scalar(
             select(func.max(EventGroup.group_number)).where(EventGroup.event_id == event_id)
@@ -814,6 +854,115 @@ class EventService:
             is_organizer=message.sender_profile_id == organizer_profile_id,
             profile=message.sender,
         )
+
+    def get_chats(self, db: Session, event_id: str, user: User) -> list[ChatRoomResponse]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if (event.status or "").strip().lower() != "active":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chat is only available for active events")
+
+        groups = self._get_event_groups(db, event_id)
+        is_organizer = event.creator_id == user.id
+        profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
+
+        if not groups or len(groups) == 1:
+            if not self._can_access_chat(db, event, user):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+            return [ChatRoomResponse(id=0, event_id=event_id, type="single", title="Чат события")]
+
+        # Multiple groups
+        if is_organizer:
+            return [ChatRoomResponse(id=LEADERS_CHAT_ID, event_id=event_id, type="leaders", title="Чат лидеров")]
+
+        if profile is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+        user_group = None
+        user_is_leader = False
+        for group in groups:
+            if group.leader_id == profile.id:
+                user_group = group
+                user_is_leader = True
+                break
+            if any(m.profile_id == profile.id for m in group.members):
+                user_group = group
+                break
+
+        if user_group is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+        result = [
+            ChatRoomResponse(
+                id=user_group.group_number,
+                event_id=event_id,
+                type="group",
+                group_number=user_group.group_number,
+                title=f"Группа {user_group.group_number}",
+            )
+        ]
+        if user_is_leader:
+            result.append(ChatRoomResponse(id=LEADERS_CHAT_ID, event_id=event_id, type="leaders", title="Чат лидеров"))
+
+        return result
+
+    def get_chat_messages(self, db: Session, event_id: str, chat_id: int, user: User) -> list[MessageResponse]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if (event.status or "").strip().lower() != "active":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chat is only available for active events")
+
+        self._validate_chat_access(db, event, chat_id, user)
+
+        messages = db.scalars(
+            select(EventMessage)
+            .where(EventMessage.event_id == event_id, EventMessage.chat_id == chat_id)
+            .order_by(EventMessage.created_at)
+        ).all()
+
+        groups = self._get_event_groups(db, event_id)
+        organizer_profile_id = self._organizer_profile_id(db, event)
+        return [self._build_message_response(message, organizer_profile_id, groups, chat_id) for message in messages]
+
+    def send_chat_message(
+        self,
+        db: Session,
+        event_id: str,
+        chat_id: int,
+        user: User,
+        content: str | None,
+        photo_url: str | None,
+    ) -> MessageResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if (event.status or "").strip().lower() != "active":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chat is only available for active events")
+
+        self._validate_chat_access(db, event, chat_id, user)
+
+        profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
+        if profile is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Profile required")
+
+        message = EventMessage(
+            event_id=event_id,
+            sender_profile_id=profile.id,
+            chat_id=chat_id,
+            content=content,
+            photo_url=photo_url,
+        )
+        db.add(message)
+        db.commit()
+        db.refresh(message)
+
+        groups = self._get_event_groups(db, event_id)
+        organizer_profile_id = self._organizer_profile_id(db, event)
+        return self._build_message_response(message, organizer_profile_id, groups, chat_id)
 
     def cancel_application(self, db: Session, event_id: str, user: User) -> EventResponse:
         event = self.get_event(db, event_id)
@@ -977,6 +1126,69 @@ class EventService:
         response.message = f"{response_message}: {applicant_name}"
         return response
 
+    def _validate_chat_access(self, db: Session, event: Event, chat_id: int, user: User) -> None:
+        groups = self._get_event_groups(db, event.id)
+        is_organizer = event.creator_id == user.id
+        profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
+
+        if not groups or len(groups) == 1:
+            if chat_id == 0 and self._can_access_chat(db, event, user):
+                return
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+        if chat_id == LEADERS_CHAT_ID:
+            if is_organizer:
+                return
+            if profile and any(g.leader_id == profile.id for g in groups):
+                return
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+        target_group = next((g for g in groups if g.group_number == chat_id), None)
+        if target_group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+        if profile and (
+            target_group.leader_id == profile.id
+            or any(m.profile_id == profile.id for m in target_group.members)
+        ):
+            return
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    def _get_event_groups(self, db: Session, event_id: str) -> list[EventGroup]:
+        return list(db.scalars(
+            select(EventGroup).where(EventGroup.event_id == event_id).order_by(EventGroup.group_number)
+        ).all())
+
+    @staticmethod
+    def _build_message_response(
+        message: EventMessage,
+        organizer_profile_id: int | None,
+        groups: list[EventGroup],
+        chat_id: int,
+    ) -> MessageResponse:
+        is_organizer = message.sender_profile_id == organizer_profile_id
+        is_leader = False
+        leader_label = None
+
+        if chat_id == LEADERS_CHAT_ID and not is_organizer:
+            for group in groups:
+                if group.leader_id == message.sender_profile_id:
+                    is_leader = True
+                    leader_label = f"Лидер {group.group_number}"
+                    break
+
+        return MessageResponse(
+            id=message.id,
+            event_id=message.event_id,
+            sender_profile_id=message.sender_profile_id,
+            content=message.content,
+            photo_url=message.photo_url,
+            created_at=message.created_at,
+            is_organizer=is_organizer,
+            is_leader=is_leader,
+            leader_label=leader_label,
+            profile=message.sender,
+        )
+
     def _can_access_chat(self, db: Session, event: Event, user: User) -> bool:
         if event.creator_id == user.id:
             return True
@@ -1005,8 +1217,8 @@ class EventService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
         if event.creator_id != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizer can modify groups")
-        if (event.status or "").strip().lower() != "grouping":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping phase")
+        if (event.status or "").strip().lower() not in _GROUP_EDIT_STATUSES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event is not in grouping or active phase")
         group = db.scalar(
             select(EventGroup).where(
                 EventGroup.event_id == event_id,
@@ -1024,7 +1236,7 @@ class EventService:
             .join(EventApplication, EventAttendance.application_id == EventApplication.id)
             .where(
                 EventAttendance.event_id == event_id,
-                EventAttendance.is_present == True,
+                EventAttendance.is_present == true(),
                 EventApplication.volunteer_id == profile_id,
             )
         )

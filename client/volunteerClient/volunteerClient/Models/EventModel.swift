@@ -213,6 +213,8 @@ struct ChatMessage: Decodable, Identifiable, Hashable {
     let photoURL: String?
     let createdAt: String
     let isOrganizer: Bool
+    let isLeader: Bool?
+    let leaderLabel: String?
     let profile: ProfileResponse
 
     enum CodingKeys: String, CodingKey {
@@ -223,7 +225,25 @@ struct ChatMessage: Decodable, Identifiable, Hashable {
         case photoURL = "photo_url"
         case createdAt = "created_at"
         case isOrganizer = "is_organizer"
+        case isLeader = "is_leader"
+        case leaderLabel = "leader_label"
         case profile
+    }
+}
+
+struct ChatRoom: Decodable, Identifiable, Hashable {
+    let id: Int
+    let eventID: String
+    let type: String
+    let groupNumber: Int?
+    let title: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case eventID = "event_id"
+        case type
+        case groupNumber = "group_number"
+        case title
     }
 }
 

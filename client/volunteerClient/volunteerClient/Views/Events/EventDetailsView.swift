@@ -17,6 +17,7 @@ struct EventDetailsView: View {
     @State private var showsDeleteAlert = false
     @State private var showsCancelEventPrompt = false
     @State private var cancelEventReason = ""
+    @State private var showsFinishAlert = false
 
     private let eventImageSize: CGFloat = 56
 
@@ -140,12 +141,20 @@ struct EventDetailsView: View {
         }
         .fullScreenCover(isPresented: $showsChat) {
             if let session {
-                EventChatView(
+                EventChatRouterView(
                     eventID: event.id,
                     session: session,
                     api: api
                 )
             }
+        }
+        .alert("Завершить событие?", isPresented: $showsFinishAlert) {
+            Button("Завершить", role: .destructive) {
+                Task { await finishEvent() }
+            }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Событие будет завершено для всех участников.")
         }
     }
 
@@ -257,6 +266,11 @@ struct EventDetailsView: View {
 
             if event.isCreator == true, (isAlmostStarting || isInAttendancePhase || isInGroupingPhase), session != nil {
                 organizerStartRow
+                    .padding(.top, 22)
+            }
+
+            if isActivePhase, event.isCreator == true, session != nil {
+                organizerActiveRow
                     .padding(.top, 22)
             }
 
@@ -497,6 +511,44 @@ struct EventDetailsView: View {
         }
     }
 
+    private var organizerActiveRow: some View {
+        VStack(spacing: 10) {
+            Button {
+                showsGroupFlow = true
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    Text("Редактировать группы")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showsFinishAlert = true
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.5), lineWidth: 1)
+                        )
+                    Text("Завершить событие")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var isAlmostStarting: Bool {
         Date() >= startDate.addingTimeInterval(-30 * 60)
     }
@@ -729,6 +781,19 @@ struct EventDetailsView: View {
             }
             currentEvent = updatedEvent
             showMessage(updatedEvent.message ?? "Заявка отменена")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func finishEvent() async {
+        guard let session else { return }
+        do {
+            let updatedEvent = try await session.performAuthorizedRequest { token in
+                try await api.finishEvent(id: currentEvent.id, token: token)
+            }
+            currentEvent = updatedEvent
+            showMessage(updatedEvent.message ?? "Событие завершено")
         } catch {
             errorMessage = error.localizedDescription
         }

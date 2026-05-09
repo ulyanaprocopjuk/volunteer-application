@@ -11,6 +11,7 @@ from .auth import (
 from .events import (
     AttendanceItemResponse,
     CancelEventRequest,
+    ChatRoomResponse,
     ConfirmAttendanceRequest,
     CreateEventRequest,
     CurrentCountryEventResponse,
@@ -54,6 +55,7 @@ __all__ = [
     "GroupMemberRequest",
     "GroupMemberResponse",
     "GroupResponse",
+    "ChatRoomResponse",
     "MessageResponse",
     "SendMessageRequest",
     "CurrentCountryEventResponse",

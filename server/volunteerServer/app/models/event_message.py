@@ -22,6 +22,7 @@ class EventMessage(Base):
     sender_profile_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("profiles.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    chat_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0", index=True)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

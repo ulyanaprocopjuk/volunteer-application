@@ -1059,7 +1059,7 @@ struct EventGroupFlowView: View {
                     }
                 )
             case .chat:
-                EventChatView(
+                EventChatRouterView(
                     eventID: eventID,
                     session: session,
                     api: api
@@ -2004,14 +2004,131 @@ private struct EventSingleGroupEditView: View {
     }
 }
 
-// MARK: - Event Chat
+// MARK: - Event Chat Router
 
-struct EventChatView: View {
+struct EventChatRouterView: View {
     @Environment(\.dismiss) private var dismiss
 
     let eventID: String
     let session: AppSession
     let api: EventAPIProtocol
+
+    @State private var chatRooms: [ChatRoom] = []
+    @State private var isLoading = true
+    @State private var selectedRoom: ChatRoom?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if let room = selectedRoom {
+                EventChatView(chatRoom: room, session: session, api: api)
+            } else {
+                routerBody
+            }
+        }
+        .task { await loadChats() }
+    }
+
+    private var routerBody: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                Color(.systemGray6).ignoresSafeArea(edges: .top)
+                Text("Чаты")
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.78))
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.black.opacity(0.75))
+                            .frame(width: 36, height: 36)
+                            .background(Circle().stroke(Color.black.opacity(0.35), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+            }
+            .frame(height: 60)
+            .overlay(alignment: .bottom) { Divider() }
+
+            if isLoading {
+                Spacer()
+                ProgressView()
+                Spacer()
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 12) {
+                        ForEach(chatRooms) { room in
+                            Button { selectedRoom = room } label: {
+                                HStack(spacing: 14) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color(red: 44/255, green: 67/255, blue: 102/255).opacity(0.12))
+                                        Image(systemName: room.type == "leaders" ? "star.fill" : "bubble.left.and.bubble.right.fill")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                    }
+                                    .frame(width: 48, height: 48)
+
+                                    Text(room.title)
+                                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.black.opacity(0.3))
+                                }
+                                .padding(14)
+                                .background(Color(.systemGray6).opacity(0.6))
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.white.ignoresSafeArea())
+        .alert("Ошибка", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { _ in errorMessage = nil }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func loadChats() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let rooms = try await session.performAuthorizedRequest { token in
+                try await api.fetchChats(eventID: eventID, token: token)
+            }
+            chatRooms = rooms
+            if rooms.count == 1 { selectedRoom = rooms.first }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Event Chat
+
+struct EventChatView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let chatRoom: ChatRoom
+    let session: AppSession
+    let api: EventAPIProtocol
+
+    private var eventID: String { chatRoom.eventID }
 
     @State private var messages: [ChatMessage] = []
     @State private var participants: [EventParticipantResponse] = []
@@ -2068,9 +2185,10 @@ struct EventChatView: View {
                 showsParticipantList = true
             } label: {
                 HStack(spacing: 6) {
-                    Text("Участники (\(participants.count))")
-                        .font(.system(size: 18, weight: .semibold, design: .serif))
+                    Text(chatRoom.title)
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
                         .foregroundColor(.black.opacity(0.78))
+                        .lineLimit(1)
 
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
@@ -2220,7 +2338,7 @@ struct EventChatView: View {
     private func loadMessages() async {
         do {
             let fetched = try await session.performAuthorizedRequest { token in
-                try await api.fetchMessages(eventID: eventID, token: token)
+                try await api.fetchChatMessages(eventID: eventID, chatID: chatRoom.id, token: token)
             }
             if fetched != messages { messages = fetched }
         } catch { }
@@ -2242,7 +2360,7 @@ struct EventChatView: View {
         defer { isSending = false }
         do {
             let msg = try await session.performAuthorizedRequest { token in
-                try await api.sendMessage(eventID: eventID, content: text, photoURL: nil, token: token)
+                try await api.sendChatMessage(eventID: eventID, chatID: chatRoom.id, content: text, photoURL: nil, token: token)
             }
             messages.append(msg)
         } catch {
@@ -2261,7 +2379,7 @@ struct EventChatView: View {
                 try await api.uploadMessagePhoto(data: data, token: token)
             }
             let msg = try await session.performAuthorizedRequest { token in
-                try await api.sendMessage(eventID: eventID, content: nil, photoURL: photoURL, token: token)
+                try await api.sendChatMessage(eventID: eventID, chatID: chatRoom.id, content: nil, photoURL: photoURL, token: token)
             }
             messages.append(msg)
         } catch {
@@ -2286,13 +2404,13 @@ private struct ChatBubbleView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Button(action: onTapProfile) {
-                        Text(message.profile.displayName)
+                        Text(message.leaderLabel ?? message.profile.displayName)
                             .font(.system(size: 13, weight: .semibold, design: .serif))
                             .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
                     }
                     .buttonStyle(.plain)
 
-                    if message.isOrganizer {
+                    if message.isOrganizer || message.isLeader == true {
                         Image(systemName: "crown.fill")
                             .font(.system(size: 11))
                             .foregroundColor(Color(red: 0.22, green: 0.44, blue: 0.87))

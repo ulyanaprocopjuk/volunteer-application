@@ -32,6 +32,10 @@ protocol EventAPIProtocol {
     func fetchMessages(eventID: String, token: String) async throws -> [ChatMessage]
     func sendMessage(eventID: String, content: String?, photoURL: String?, token: String) async throws -> ChatMessage
     func uploadMessagePhoto(data: Data, token: String) async throws -> String
+    func fetchChats(eventID: String, token: String) async throws -> [ChatRoom]
+    func fetchChatMessages(eventID: String, chatID: Int, token: String) async throws -> [ChatMessage]
+    func sendChatMessage(eventID: String, chatID: Int, content: String?, photoURL: String?, token: String) async throws -> ChatMessage
+    func finishEvent(id: String, token: String) async throws -> EventResponse
 }
 
 final class EventAPI: EventAPIProtocol {
@@ -428,6 +432,42 @@ final class EventAPI: EventAPIProtocol {
             throw EventAPIError.invalidResponse
         }
         return url
+    }
+
+    func fetchChats(eventID: String, token: String) async throws -> [ChatRoom] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/chats"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([ChatRoom].self, from: data)
+    }
+
+    func fetchChatMessages(eventID: String, chatID: Int, token: String) async throws -> [ChatMessage] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/chats/\(chatID)/messages"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([ChatMessage].self, from: data)
+    }
+
+    func sendChatMessage(eventID: String, chatID: Int, content: String?, photoURL: String?, token: String) async throws -> ChatMessage {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/chats/\(chatID)/messages"))
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        var body: [String: String] = [:]
+        if let content { body["content"] = content }
+        if let photoURL { body["photoURL"] = photoURL }
+        urlRequest.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(ChatMessage.self, from: data)
+    }
+
+    func finishEvent(id: String, token: String) async throws -> EventResponse {
+        try await postEventAction(path: "api/events/\(id)/finish", token: token)
     }
 
     private func postGroupAction(path: String, token: String) async throws -> [EventGroup] {
