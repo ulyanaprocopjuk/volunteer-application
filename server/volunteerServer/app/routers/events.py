@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_optional_user
+from app.api.deps import get_current_admin, get_current_user, get_optional_user
 from app.db import get_db
 from app.models import User
 from app.schemas import (
@@ -46,6 +46,15 @@ def cancel_event(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     return event_service.cancel_event(db, event_id, current_user, payload.reason)
+
+
+@router.post("/{event_id}/approve", response_model=EventResponse)
+def approve_event(
+    event_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_admin: Annotated[User, Depends(get_current_admin)],
+):
+    return event_service.approve_event(db, event_id, current_admin)
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)

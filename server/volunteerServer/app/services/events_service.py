@@ -90,6 +90,25 @@ class EventService:
         response.message = "Событие отправлено для подтверждения, ожидайте."
         return response
 
+    def approve_event(self, db: Session, event_id: str, admin: User) -> EventResponse:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        normalized_status = (event.status or "").strip().lower()
+        if normalized_status not in ("pending", "approved"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event cannot be approved")
+
+        event.status = "approved"
+        event.reviewed_by = admin.id
+        event.reviewed_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(event)
+
+        response = self._response(db, event, admin)
+        response.message = "Событие подтверждено"
+        return response
+
     def get_event(self, db: Session, event_id: str) -> Event | None:
         return db.get(Event, event_id)
 
