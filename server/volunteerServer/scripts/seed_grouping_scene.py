@@ -296,7 +296,7 @@ def main() -> int:
     api = ApiClient(args.base_url)
     admin_token = login(api, admin_username, admin_password)
 
-    organizer_email = f"{args.prefix}.organizer@example.test"
+    organizer_email = f"{args.prefix}.organizer@volunteer-seed.com"
     organizer = ensure_user(
         api,
         username=f"{args.prefix}-organizer",
@@ -318,7 +318,7 @@ def main() -> int:
 
     users: list[SeedUser] = []
     for index in range(1, args.participants + 1):
-        email = f"{args.prefix}.participant{index:02d}@example.test"
+        email = f"{args.prefix}.participant{index:02d}@volunteer-seed.com"
         users.append(
             ensure_user(
                 api,
