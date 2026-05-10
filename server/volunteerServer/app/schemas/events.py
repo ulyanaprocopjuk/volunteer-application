@@ -231,6 +231,16 @@ class RatableProfileResponse(BaseModel):
     last_name: str | None
     avatar_url: str | None
     current_rating: int
+    is_present: bool = True
+    is_leader: bool = False
+
+
+class RatingHistoryItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    delta: int
+    event_title: str | None
+    created_at: str
 
 
 class RatingItem(BaseModel):

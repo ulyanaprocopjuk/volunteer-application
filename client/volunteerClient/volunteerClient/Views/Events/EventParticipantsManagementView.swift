@@ -12,6 +12,7 @@ struct EventParticipantsManagementView: View {
     @State private var removalReason = ""
     @State private var showsRemovalPrompt = false
     private let participantsOnly: Bool
+    private let session: AppSession
 
     init(
         eventID: String,
@@ -22,6 +23,7 @@ struct EventParticipantsManagementView: View {
     ) {
         _selectedSegment = State(initialValue: initialSegment)
         self.participantsOnly = participantsOnly
+        self.session = session
         _viewModel = StateObject(
             wrappedValue: EventParticipantsManagementViewModel(eventID: eventID, session: session, api: api)
         )
@@ -72,7 +74,11 @@ struct EventParticipantsManagementView: View {
             Text("Участнику придёт уведомление с указанной причиной.")
         }
         .fullScreenCover(item: $selectedProfile) { profile in
-            ParticipantProfileDetailsView(profile: profile)
+            ParticipantProfileDetailsView(
+                profile: profile,
+                session: session,
+                profileAPI: ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+            )
         }
     }
 
@@ -489,6 +495,8 @@ enum EventParticipantsSegment: CaseIterable {
 private struct ParticipantProfileDetailsView: View {
     @Environment(\.dismiss) private var dismiss
     let profile: ProfileResponse
+    let session: AppSession
+    let profileAPI: ProfileAPIProtocol
 
     private var isOrganization: Bool { profile.type == "organization" }
 
@@ -509,6 +517,13 @@ private struct ParticipantProfileDetailsView: View {
                         }
                     }
                     .padding(.horizontal, 24)
+                    .padding(.top, 28)
+
+                    RatingHistorySection(
+                        profileID: profile.id,
+                        session: session,
+                        profileAPI: profileAPI
+                    )
                     .padding(.top, 28)
                 }
                 .padding(.bottom, 24)
@@ -613,6 +628,9 @@ private struct ParticipantProfileDetailsView: View {
             ReadOnlyField(title: "Местонахождение", value: profile.locationText)
             ReadOnlySkillsField(title: "Навыки", values: profile.skills ?? [])
             ReadOnlyMultilineField(title: "Обо мне", value: profile.about ?? "")
+            if let rating = profile.rating {
+                ratingBlock(rating: rating)
+            }
         }
     }
 
@@ -622,7 +640,36 @@ private struct ParticipantProfileDetailsView: View {
             ReadOnlyField(title: "Телефон", value: profile.phone ?? "")
             ReadOnlyField(title: "Местонахождение", value: profile.locationText)
             ReadOnlyMultilineField(title: "О нас", value: profile.about ?? "")
+            if let rating = profile.rating {
+                ratingBlock(rating: rating)
+            }
         }
+    }
+
+    private func ratingBlock(rating: Int) -> some View {
+        let tier = RatingTier(rating: rating)
+        return HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Рейтинг")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.gray)
+                Text("\(rating)")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.black)
+                Text(tier.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(tier.color)
+            }
+            Spacer()
+            RatingBadgeView(rating: rating)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white)
+        )
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
     }
 }
 
@@ -813,7 +860,11 @@ struct EventAttendanceConfirmationView: View {
             Text(errorMessage ?? "")
         }
         .fullScreenCover(item: $selectedProfile) { profile in
-            ParticipantProfileDetailsView(profile: profile)
+            ParticipantProfileDetailsView(
+                profile: profile,
+                session: session,
+                profileAPI: ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+            )
         }
     }
 
@@ -2174,7 +2225,11 @@ struct EventChatView: View {
             participantListSheet
         }
         .fullScreenCover(item: $selectedProfile) { profile in
-            ParticipantProfileDetailsView(profile: profile)
+            ParticipantProfileDetailsView(
+                profile: profile,
+                session: session,
+                profileAPI: ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+            )
         }
         .alert("Ошибка", isPresented: Binding(
             get: { errorMessage != nil },
@@ -2632,6 +2687,8 @@ private struct ProfilePickerSheet: View {
             country: "Беларусь",
             skills: ["Первая помощь", "Организация мероприятий"],
             about: "Готова помогать на городских событиях.", rating: 92, isVerified: true
-        )
+        ),
+        session: AppSession(),
+        profileAPI: ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
     )
 }

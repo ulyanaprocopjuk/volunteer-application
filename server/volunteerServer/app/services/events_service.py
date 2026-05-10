@@ -6,7 +6,7 @@ from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import and_, false, func, or_, select, true, update
 from sqlalchemy.orm import Session
 
-from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, EventGroup, EventGroupMember, EventMessage, EventRating, Profile, ProfileType, User
+from app.models import Direction, Event, EventApplication, EventApplicationStatus, EventAttendance, EventGroup, EventGroupMember, EventMessage, EventRating, Profile, ProfileType, RatingHistory, User
 from app.schemas import (
     AttendanceItemResponse,
     ChatRoomResponse,
@@ -558,7 +558,7 @@ class EventService:
             if record.application_id not in present_set:
                 application = db.get(EventApplication, record.application_id)
                 if application is not None:
-                    self._adjust_rating(application.volunteer, -50)
+                    self._adjust_rating(db, application.volunteer, -50, event_id=event_id, event_title=event.title)
 
         present_count = len(present_set)
         event.present_count = present_count
@@ -1026,7 +1026,7 @@ class EventService:
                 starts_at = starts_at.replace(tzinfo=UTC)
             hours_until = (starts_at - now).total_seconds() / 3600 if starts_at else None
             penalty = -30 if (hours_until is not None and hours_until < 6) else -10
-            self._adjust_rating(profile, penalty)
+            self._adjust_rating(db, profile, penalty, event_id=event_id, event_title=event.title)
 
         db.commit()
         db.refresh(event)
@@ -1112,24 +1112,53 @@ class EventService:
         profile = self._profile_for_user(db, user)
         is_organizer = event.creator_id == user.id
 
+        # Build attendance map: volunteer_id → is_present
+        all_applications = db.scalars(
+            select(EventApplication).where(EventApplication.event_id == event_id)
+        ).all()
+        app_by_id = {a.id: a for a in all_applications}
+        attendance_records = db.scalars(
+            select(EventAttendance).where(EventAttendance.event_id == event_id)
+        ).all()
+        presence_map: dict[int, bool] = {}
+        for record in attendance_records:
+            app = app_by_id.get(record.application_id)
+            if app:
+                presence_map[app.volunteer_id] = record.is_present
+
+        absent_volunteer_ids = {vid for vid, present in presence_map.items() if not present}
+
         groups = self._get_event_groups(db, event_id)
         has_groups = len(groups) > 0
 
+        profiles: list[Profile] = []
+        leader_profile_ids: set[int] = set()
+
         if is_organizer:
+            seen_ids: set[int] = {profile.id}
             if has_groups:
-                # Organizer rates only group leaders
+                # Organizer rates group leaders + absent participants
                 leader_ids = {g.leader_id for g in groups if g.leader_id is not None}
-                profiles = [db.get(Profile, lid) for lid in leader_ids]
-                profiles = [p for p in profiles if p is not None and p.id != profile.id]
+                leader_profile_ids = leader_ids
+                for lid in leader_ids:
+                    p = db.get(Profile, lid)
+                    if p and p.id not in seen_ids:
+                        seen_ids.add(p.id)
+                        profiles.append(p)
             else:
                 # No groups — organizer rates all accepted participants
-                applications = db.scalars(
-                    select(EventApplication).where(
-                        EventApplication.event_id == event_id,
-                        EventApplication.status == EventApplicationStatus.accepted,
-                    )
-                ).all()
-                profiles = [a.volunteer for a in applications if a.volunteer.id != profile.id]
+                for app in all_applications:
+                    if app.status == EventApplicationStatus.accepted and app.volunteer_id not in seen_ids:
+                        seen_ids.add(app.volunteer_id)
+                        profiles.append(app.volunteer)
+
+            # Always add absent participants (present=False)
+            for vid in absent_volunteer_ids:
+                if vid not in seen_ids:
+                    p = db.get(Profile, vid)
+                    if p:
+                        seen_ids.add(vid)
+                        profiles.append(p)
         else:
             # Leader rates members of own group; regular member has no one to rate
             group_member = db.scalar(
@@ -1144,7 +1173,6 @@ class EventService:
             group = db.get(EventGroup, group_member.group_id)
             if group is None or group.leader_id != profile.id:
                 return []
-            # Leader rates all non-leader members of their group
             member_rows = db.scalars(
                 select(EventGroupMember).where(
                     EventGroupMember.group_id == group.id,
@@ -1172,6 +1200,8 @@ class EventService:
                 last_name=p.last_name,
                 avatar_url=p.avatar_url,
                 current_rating=p.rating,
+                is_present=presence_map.get(p.id, True),
+                is_leader=p.id in leader_profile_ids,
             )
             for p in profiles
             if p.id not in already_rated
@@ -1210,7 +1240,7 @@ class EventService:
                 score=item.score,
             )
             db.add(rating_record)
-            self._adjust_rating(rated_profile, item.score)
+            self._adjust_rating(db, rated_profile, item.score, event_id=event_id, event_title=event.title)
 
         if is_organizer:
             event.status = "completed"
@@ -1226,9 +1256,22 @@ class EventService:
 
         return response
 
-    @staticmethod
-    def _adjust_rating(profile: Profile, delta: int) -> None:
+    def _adjust_rating(
+        self,
+        db: Session,
+        profile: Profile,
+        delta: int,
+        event_id: str | None = None,
+        event_title: str | None = None,
+    ) -> None:
         profile.rating = max(0, profile.rating + delta)
+        db.add(RatingHistory(
+            profile_id=profile.id,
+            delta=delta,
+            event_id=event_id,
+            event_title=event_title,
+            created_at=datetime.now(UTC),
+        ))
 
     def list_events_for_current_user_country(
         self,

@@ -94,6 +94,15 @@ struct ProfileView: View {
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 28)
+
+                if let pid = model.profileID {
+                    RatingHistorySection(
+                        profileID: pid,
+                        session: model.appSession,
+                        profileAPI: model.profileAPI
+                    )
+                    .padding(.top, 28)
+                }
             }
             .padding(.bottom, 24)
         }
@@ -247,18 +256,10 @@ struct ProfileView: View {
     }
 
     private var ratingCard: some View {
-        let navy = Color(red: 44/255, green: 67/255, blue: 102/255)
         let r = model.rating
-        let (levelName, levelColor): (String, Color) = {
-            switch r {
-            case 80...: return ("Надёжный", Color(red: 0.2, green: 0.7, blue: 0.4))
-            case 50..<80: return ("Хороший", Color(red: 0.3, green: 0.6, blue: 0.9))
-            case 20..<50: return ("Средний", Color(red: 1.0, green: 0.65, blue: 0.0))
-            default: return ("Низкий", Color(red: 0.85, green: 0.2, blue: 0.2))
-            }
-        }()
+        let tier = RatingTier(rating: r)
 
-        return HStack {
+        return HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Ваш текущий рейтинг")
                     .font(.system(size: 13, weight: .medium))
@@ -268,22 +269,14 @@ struct ProfileView: View {
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.black)
 
-                Text(levelName)
+                Text(tier.title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(levelColor)
+                    .foregroundColor(tier.color)
             }
 
             Spacer()
 
-            ZStack {
-                Circle()
-                    .fill(navy.opacity(0.12))
-                    .frame(width: 52, height: 52)
-
-                Image(systemName: "star.fill")
-                    .font(.system(size: 22))
-                    .foregroundColor(navy)
-            }
+            RatingBadgeView(rating: r)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)

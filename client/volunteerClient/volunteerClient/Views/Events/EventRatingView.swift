@@ -250,14 +250,32 @@ struct EventRatingView: View {
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())
                 .background(Circle().fill(navy.opacity(0.1)))
+                .opacity(profile.isPresent ? 1 : 0.5)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(profile.displayName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.black)
-                    Text("Рейтинг: \(profile.currentRating)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray)
+                    HStack(spacing: 6) {
+                        Text(profile.displayName)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.black)
+                        if profile.isLeader {
+                            Text("Лидер")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color(red: 44/255, green: 67/255, blue: 102/255)))
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        Text("Рейтинг: \(profile.currentRating)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                        if !profile.isPresent {
+                            Text("• Не явился")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(red: 0.85, green: 0.2, blue: 0.2))
+                        }
+                    }
                 }
                 Spacer()
             }
@@ -268,9 +286,9 @@ struct EventRatingView: View {
         .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white)
+                .fill(profile.isPresent ? Color.white : Color(.systemGray6))
         )
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 3)
+        .shadow(color: .black.opacity(profile.isPresent ? 0.05 : 0.02), radius: 8, x: 0, y: 3)
     }
 
     private func facePicker(for profileID: Int) -> some View {
@@ -339,7 +357,16 @@ struct EventRatingView: View {
         defer { isSubmitting = false }
         do {
             let items = profiles.map { profile -> RatingItem in
-                let score: Int = selectedScores[profile.profileID] ?? 0
+                let raw: Int = selectedScores[profile.profileID] ?? 0
+                let score: Int
+                if raw == eventRatingPoints && isOrganizerVerified {
+                    // Star selected: add % bonus on top of event points
+                    let bonusPct = profile.isLeader ? 0.30 : 0.20
+                    let bonus = Int(Double(profile.currentRating) * bonusPct)
+                    score = raw + bonus
+                } else {
+                    score = raw
+                }
                 return RatingItem(profileID: profile.profileID, score: score)
             }
             let updated = try await session.performAuthorizedRequest { token in

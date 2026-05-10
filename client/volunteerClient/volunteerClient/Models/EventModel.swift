@@ -422,6 +422,8 @@ struct RatableProfile: Decodable, Identifiable, Hashable {
     let lastName: String?
     let avatarURL: String?
     let currentRating: Int
+    let isPresent: Bool
+    let isLeader: Bool
 
     var id: Int { profileID }
 
@@ -436,6 +438,8 @@ struct RatableProfile: Decodable, Identifiable, Hashable {
         case lastName = "last_name"
         case avatarURL = "avatar_url"
         case currentRating = "current_rating"
+        case isPresent = "is_present"
+        case isLeader = "is_leader"
     }
 }
 

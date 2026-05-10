@@ -36,6 +36,20 @@ struct ProfileResponse: Decodable, Identifiable, Hashable {
     }
 }
 
+struct RatingHistoryItem: Decodable, Identifiable {
+    let delta: Int
+    let eventTitle: String?
+    let createdAt: String
+
+    var id: String { "\(createdAt)-\(delta)" }
+
+    enum CodingKeys: String, CodingKey {
+        case delta
+        case eventTitle = "event_title"
+        case createdAt = "created_at"
+    }
+}
+
 struct ProfileUpsertRequest: Encodable {
     let type: String
     let avatarURL: String?

@@ -45,7 +45,7 @@ class Profile(Base):
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     country: Mapped[str] = mapped_column(String(100), nullable=False)
     about: Mapped[str | None] = mapped_column(Text, nullable=True)
-    rating: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    rating: Mapped[int] = mapped_column(Integer, nullable=False, default=200, server_default="200")
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

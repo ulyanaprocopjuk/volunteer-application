@@ -93,6 +93,7 @@ final class ProfileSetupViewModel: ObservableObject {
 
     @Published var rating: Int = 100
     @Published var isVerified: Bool = false
+    @Published var profileID: Int? = nil
 
     @Published var isLoading = false
     @Published var isProfileLoading = false
@@ -128,6 +129,9 @@ final class ProfileSetupViewModel: ObservableObject {
         self.session = session
         self.api = api ?? ProfileAPI(baseURL: URL(string: AppConfig.baseURLString)!)
     }
+
+    var appSession: AppSession { session }
+    var profileAPI: ProfileAPIProtocol { api }
 
     var isVolunteer: Bool {
         selectedType == .volunteer
@@ -442,6 +446,7 @@ final class ProfileSetupViewModel: ObservableObject {
         avatarURL = profile.avatarURL
         rating = profile.rating ?? 100
         isVerified = profile.isVerified ?? false
+        profileID = profile.id
 
         let phone = profile.phone ?? ""
         let email = profile.email ?? ""

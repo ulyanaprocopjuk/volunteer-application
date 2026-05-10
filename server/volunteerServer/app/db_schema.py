@@ -112,6 +112,21 @@ def ensure_database_schema(engine: Engine) -> None:
                 for stmt in user_stmts:
                     connection.execute(text(stmt))
 
+    if "rating_history" not in table_names:
+        dialect = engine.dialect.name
+        ts_type = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
+        with engine.begin() as connection:
+            connection.execute(text(f"""
+                CREATE TABLE rating_history (
+                    id INTEGER PRIMARY KEY {'GENERATED ALWAYS AS IDENTITY' if dialect == 'postgresql' else 'AUTOINCREMENT'},
+                    profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    delta INTEGER NOT NULL,
+                    event_id VARCHAR(36) REFERENCES events(id) ON DELETE SET NULL,
+                    event_title VARCHAR(500),
+                    created_at {ts_type} NOT NULL
+                )
+            """))
+
     if "events" not in table_names:
         return
 

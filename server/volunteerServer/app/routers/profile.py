@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db import get_db
-from app.models import Profile, ProfileType, Skill, User
+from app.models import Profile, ProfileType, RatingHistory, Skill, User
 from app.schemas import ProfileResponse, ProfileUpsertRequest
+from app.schemas.events import RatingHistoryItemResponse
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
@@ -60,6 +61,28 @@ def get_my_profile(
             detail="Profile not found",
         )
     return profile
+
+
+@router.get("/{profile_id}/rating-history", response_model=list[RatingHistoryItemResponse])
+def get_rating_history(
+    profile_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
+):
+    records = db.scalars(
+        select(RatingHistory)
+        .where(RatingHistory.profile_id == profile_id)
+        .order_by(RatingHistory.created_at.desc())
+        .limit(50)
+    ).all()
+    return [
+        RatingHistoryItemResponse(
+            delta=r.delta,
+            event_title=r.event_title,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in records
+    ]
 
 
 def _resolve_skill_refs(db: Session, skill_names: list[str]) -> list[Skill]:

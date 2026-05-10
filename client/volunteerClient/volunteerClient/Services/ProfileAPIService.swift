@@ -2,8 +2,9 @@ import Foundation
 
 protocol ProfileAPIProtocol {
     func uploadAvatar(data: Data, token: String?) async throws -> String
-    func saveProfile(_ requestModel: ProfileUpsertRequest, token: String?) async throws 
+    func saveProfile(_ requestModel: ProfileUpsertRequest, token: String?) async throws
     func fetchMyProfile(token: String?) async throws -> ProfileResponse
+    func fetchRatingHistory(profileID: Int, token: String?) async throws -> [RatingHistoryItem]
 }
 
 final class ProfileAPI: ProfileAPIProtocol {
@@ -58,6 +59,16 @@ final class ProfileAPI: ProfileAPIProtocol {
         let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(ProfileResponse.self, from: data)
+    }
+
+    func fetchRatingHistory(profileID: Int, token: String?) async throws -> [RatingHistoryItem] {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/profile/\(profileID)/rating-history"))
+        request.httpMethod = "GET"
+        addAuthorization(token, to: &request)
+
+        let (data, response) = try await NetworkRequestExecutor.data(for: request, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([RatingHistoryItem].self, from: data)
     }
 
     private func addAuthorization(_ token: String?, to request: inout URLRequest) {
