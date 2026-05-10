@@ -133,6 +133,10 @@ final class ProfileSetupViewModel: ObservableObject {
         selectedType == .volunteer
     }
 
+    var isBanned: Bool {
+        session.isBanned
+    }
+
     var phoneCountries: [PhoneCountry] {
         PhoneCountry.cisCountries
     }

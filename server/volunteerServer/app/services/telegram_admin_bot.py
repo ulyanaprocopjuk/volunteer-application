@@ -94,6 +94,8 @@ class TelegramAdminBot:
         self._running = True
         logger.info("Telegram admin bot polling started. Admin IDs: %s", self.admin_ids)
 
+        await self._register_commands()
+
         while self._running:
             try:
                 updates = await asyncio.to_thread(
@@ -524,6 +526,18 @@ class TelegramAdminBot:
         elif text.startswith("/verifyOrg"):
             arg = text[len("/verifyOrg"):].strip()
             response_text = self._verify_organization(arg)
+        elif text.startswith("/listProfile"):
+            search_query = text[len("/listProfile"):].strip()
+            response_text = self._list_profiles(search_query)
+        elif text.startswith("/ban"):
+            arg = text[len("/ban"):].strip()
+            response_text = self._ban_profile(arg)
+        elif text.startswith("/unban"):
+            arg = text[len("/unban"):].strip()
+            response_text = self._unban_profile(arg)
+        elif text.startswith("/freeze"):
+            arg = text[len("/freeze"):].strip()
+            response_text = self._freeze_profile(arg)
         else:
             response_text = "Неизвестная команда."
 
@@ -737,6 +751,181 @@ class TelegramAdminBot:
             "completed": "Завершено",
         }
         return statuses.get(status or "", status or "")
+
+    async def _register_commands(self) -> None:
+        commands = [
+            {"command": "time",        "description": "Текущее время сервера"},
+            {"command": "listProfile", "description": "Список всех профилей"},
+            {"command": "listOrg",     "description": "Список организаций"},
+            {"command": "verifyOrg",   "description": "Подтвердить организацию по ID профиля"},
+            {"command": "ban",         "description": "Заблокировать аккаунт по ID профиля"},
+            {"command": "unban",       "description": "Снять блокировку/заморозку по ID профиля"},
+            {"command": "freeze",      "description": "Заморозить аккаунт на N минут по ID профиля"},
+        ]
+        await self._safe_api("setMyCommands", {"commands": json.dumps(commands, ensure_ascii=False)})
+
+    def _list_profiles(self, search_query: str) -> str:
+        db = SessionLocal()
+        try:
+            query = select(Profile).join(Profile.user)
+            if search_query:
+                name_filter = (
+                    Profile.organization_name.ilike(f"%{search_query}%")
+                    | Profile.first_name.ilike(f"%{search_query}%")
+                    | Profile.last_name.ilike(f"%{search_query}%")
+                    | User.username.ilike(f"%{search_query}%")
+                )
+                query = query.where(name_filter)
+            query = query.order_by(Profile.id).limit(50)
+            profiles = db.scalars(query).all()
+
+            if not profiles:
+                hint = f" по запросу «{search_query}»" if search_query else ""
+                return f"Профили{hint} не найдены."
+
+            lines = ["<b>Список профилей:</b>\n"]
+            for p in profiles:
+                if p.type == ProfileType.organization:
+                    name = html.escape(p.organization_name or "—")
+                    type_label = "орг"
+                else:
+                    parts = [p.first_name or "", p.last_name or ""]
+                    name = html.escape(" ".join(x for x in parts if x).strip() or "—")
+                    type_label = "вол"
+
+                username = html.escape(p.user.username if p.user else "—")
+                status_parts = []
+                if p.user and p.user.is_banned:
+                    status_parts.append("🚫бан")
+                elif p.user and p.user.frozen_until:
+                    now = datetime.now(timezone.utc)
+                    fu = p.user.frozen_until
+                    if fu.tzinfo is None:
+                        fu = fu.replace(tzinfo=timezone.utc)
+                    if fu > now:
+                        status_parts.append("❄️заморожен")
+                status = f" [{', '.join(status_parts)}]" if status_parts else ""
+
+                lines.append(
+                    f"• [{type_label}] {name} (@{username}){status} — ID: <code>{p.id}</code>"
+                )
+
+            return "\n".join(lines)
+        except Exception:
+            logger.exception("Failed to list profiles")
+            return "Ошибка при получении списка профилей."
+        finally:
+            db.close()
+
+    def _ban_profile(self, arg: str) -> str:
+        if not arg:
+            return "Укажите ID профиля: /ban [id]"
+        try:
+            profile_id = int(arg)
+        except ValueError:
+            return f"Некорректный ID: {html.escape(arg)}"
+
+        db = SessionLocal()
+        try:
+            profile = db.get(Profile, profile_id)
+            if profile is None:
+                return f"Профиль с ID {profile_id} не найден."
+            user = profile.user
+            if user is None:
+                return f"Пользователь для профиля {profile_id} не найден."
+
+            user.is_banned = True
+            user.frozen_until = None
+            db.commit()
+
+            name = self._profile_display(profile)
+            return f"🚫 Аккаунт <b>{name}</b> (ID профиля: {profile_id}) заблокирован."
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to ban profile %s", arg)
+            return "Ошибка при блокировке аккаунта."
+        finally:
+            db.close()
+
+    def _unban_profile(self, arg: str) -> str:
+        if not arg:
+            return "Укажите ID профиля: /unban [id]"
+        try:
+            profile_id = int(arg)
+        except ValueError:
+            return f"Некорректный ID: {html.escape(arg)}"
+
+        db = SessionLocal()
+        try:
+            profile = db.get(Profile, profile_id)
+            if profile is None:
+                return f"Профиль с ID {profile_id} не найден."
+            user = profile.user
+            if user is None:
+                return f"Пользователь для профиля {profile_id} не найден."
+
+            user.is_banned = False
+            user.frozen_until = None
+            db.commit()
+
+            name = self._profile_display(profile)
+            return f"✅ Блокировка/заморозка аккаунта <b>{name}</b> (ID профиля: {profile_id}) снята."
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to unban profile %s", arg)
+            return "Ошибка при снятии блокировки."
+        finally:
+            db.close()
+
+    def _freeze_profile(self, arg: str) -> str:
+        parts = arg.split()
+        if len(parts) < 2:
+            return "Использование: /freeze [id] [минуты]"
+        try:
+            profile_id = int(parts[0])
+        except ValueError:
+            return f"Некорректный ID: {html.escape(parts[0])}"
+        try:
+            minutes = int(parts[1])
+            if minutes <= 0:
+                raise ValueError
+        except ValueError:
+            return "Количество минут должно быть положительным числом."
+
+        db = SessionLocal()
+        try:
+            profile = db.get(Profile, profile_id)
+            if profile is None:
+                return f"Профиль с ID {profile_id} не найден."
+            user = profile.user
+            if user is None:
+                return f"Пользователь для профиля {profile_id} не найден."
+
+            from datetime import timedelta
+            frozen_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+            user.frozen_until = frozen_until
+            user.is_banned = False
+            db.commit()
+
+            until_str = frozen_until.strftime("%d.%m.%Y %H:%M UTC")
+            name = self._profile_display(profile)
+            return (
+                f"❄️ Аккаунт <b>{name}</b> (ID профиля: {profile_id}) "
+                f"заморожен на {minutes} мин. до {until_str}."
+            )
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to freeze profile %s", arg)
+            return "Ошибка при заморозке аккаунта."
+        finally:
+            db.close()
+
+    @staticmethod
+    def _profile_display(profile: Profile) -> str:
+        if profile.type == ProfileType.organization:
+            return html.escape(profile.organization_name or "—")
+        parts = [profile.first_name or "", profile.last_name or ""]
+        return html.escape(" ".join(x for x in parts if x).strip() or "—")
 
     def _list_organizations(self, search_query: str) -> str:
         db = SessionLocal()

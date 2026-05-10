@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -21,6 +22,25 @@ def _resolve_user_from_token(token: str, db: Session) -> User | None:
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         return None
+
+    if user.is_banned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ваш аккаунт заблокирован",
+        )
+
+    if user.frozen_until is not None:
+        now = datetime.now(timezone.utc)
+        frozen_until = user.frozen_until
+        if frozen_until.tzinfo is None:
+            frozen_until = frozen_until.replace(tzinfo=timezone.utc)
+        if frozen_until > now:
+            until_str = frozen_until.strftime("%d.%m.%Y %H:%M UTC")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Ваш аккаунт временно заморожен до {until_str}",
+            )
+
     return user
 
 

@@ -2631,7 +2631,7 @@ private struct ProfilePickerSheet: View {
             city: "Минск",
             country: "Беларусь",
             skills: ["Первая помощь", "Организация мероприятий"],
-            about: "Готова помогать на городских событиях.", rating: 92
+            about: "Готова помогать на городских событиях.", rating: 92, isVerified: true
         )
     )
 }

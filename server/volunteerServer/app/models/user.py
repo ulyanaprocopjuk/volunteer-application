@@ -4,6 +4,8 @@ import enum
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from datetime import datetime, timezone
+
 from sqlalchemy import Boolean, DateTime, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +36,8 @@ class User(Base):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    frozen_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

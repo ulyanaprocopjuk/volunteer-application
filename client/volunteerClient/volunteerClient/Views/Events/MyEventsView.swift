@@ -292,11 +292,19 @@ struct MyEventCard: View {
                 .font(.system(size: 13, weight: .regular, design: .serif))
                 .foregroundColor(.black.opacity(0.48))
 
-            Text(organizerText)
-                .font(.system(size: 14, weight: .semibold, design: .serif))
-                .foregroundColor(.black.opacity(0.62))
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 3) {
+                Text(organizerText)
+                    .font(.system(size: 14, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.62))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if event.isOrganizerVerified == true {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+                }
+            }
         }
         .frame(width: 90, alignment: .leading)
     }

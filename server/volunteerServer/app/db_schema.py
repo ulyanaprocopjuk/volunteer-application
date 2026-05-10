@@ -97,6 +97,21 @@ def ensure_database_schema(engine: Engine) -> None:
                     f"ALTER TABLE profiles ADD COLUMN is_verified {bool_type} NOT NULL DEFAULT FALSE"
                 ))
 
+    if "users" in table_names:
+        user_columns = {col["name"] for col in inspector.get_columns("users")}
+        dialect = engine.dialect.name
+        user_stmts: list[str] = []
+        if "is_banned" not in user_columns:
+            bool_type = "BOOLEAN" if dialect == "postgresql" else "INTEGER"
+            user_stmts.append(f"ALTER TABLE users ADD COLUMN is_banned {bool_type} NOT NULL DEFAULT FALSE")
+        if "frozen_until" not in user_columns:
+            ts_type = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
+            user_stmts.append(f"ALTER TABLE users ADD COLUMN frozen_until {ts_type} NULL")
+        if user_stmts:
+            with engine.begin() as connection:
+                for stmt in user_stmts:
+                    connection.execute(text(stmt))
+
     if "events" not in table_names:
         return
 

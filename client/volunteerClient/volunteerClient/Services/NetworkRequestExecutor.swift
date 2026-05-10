@@ -65,4 +65,9 @@ extension Error {
 
         return (self as NSError).code == 401
     }
+
+    var isAccountBlockedResponse: Bool {
+        let msg = localizedDescription
+        return msg.contains("заблокирован") || msg.contains("заморожен")
+    }
 }

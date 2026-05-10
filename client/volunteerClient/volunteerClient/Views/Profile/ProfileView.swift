@@ -72,6 +72,13 @@ struct ProfileView: View {
                 avatarSection
                     .padding(.top, 24)
 
+                if model.isBanned {
+                    Text("Заблокирован")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+                        .padding(.top, 8)
+                }
+
                 if model.isVolunteer {
                     ratingCard
                         .padding(.top, 18)

@@ -21,6 +21,7 @@ final class AppSession: ObservableObject {
     @Published private(set) var token: String?
     @Published private(set) var currentUser: UserResponse?
     @Published var globalError: String?
+    @Published private(set) var isBanned = false
 
     private let authAPI: AuthAPIProtocol
     private let keychain: KeychainStorage
@@ -45,6 +46,7 @@ final class AppSession: ObservableObject {
     func restoreSession() async {
         flow = .loading
         globalError = nil
+        isBanned = false
 
         do {
             let savedAccessToken = try keychain.loadAccessToken()
@@ -126,6 +128,14 @@ final class AppSession: ObservableObject {
         do {
             return try await operation(token)
         } catch {
+            if error.isAccountBlockedResponse {
+                isBanned = error.localizedDescription.contains("заблокирован")
+                clearSessionState()
+                globalError = error.localizedDescription
+                flow = .auth
+                throw error
+            }
+
             guard error.isUnauthorizedResponse else {
                 throw error
             }
@@ -222,6 +232,7 @@ final class AppSession: ObservableObject {
     private func clearLocalStateOnly() {
         token = nil
         currentUser = nil
+        isBanned = false
     }
 
     private func jwtIsExpired(_ token: String) -> Bool {

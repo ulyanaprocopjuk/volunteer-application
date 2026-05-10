@@ -67,6 +67,8 @@ struct UserResponse: Decodable, Identifiable {
     let emailVerified: Bool
     let role: UserRole
     let isActive: Bool
+    let isBanned: Bool
+    let frozenUntil: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -75,6 +77,8 @@ struct UserResponse: Decodable, Identifiable {
         case emailVerified = "email_verified"
         case role
         case isActive = "is_active"
+        case isBanned = "is_banned"
+        case frozenUntil = "frozen_until"
     }
 }
 
