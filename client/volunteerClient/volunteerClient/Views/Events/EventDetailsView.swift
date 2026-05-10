@@ -595,15 +595,18 @@ struct EventDetailsView: View {
     }
 
     private var isInAttendancePhase: Bool {
-        event.status?.lowercased() == "attendance"
+        let s = event.status?.lowercased() ?? ""
+        return s == "attendance"
     }
 
     private var isInGroupingPhase: Bool {
-        event.status?.lowercased() == "grouping"
+        let s = event.status?.lowercased() ?? ""
+        return s == "grouping"
     }
 
     private var isActivePhase: Bool {
-        event.status?.lowercased() == "active"
+        let s = event.status?.lowercased() ?? ""
+        return s == "active" || s == "активно" || s == "началось"
     }
 
     private var isInRatingPhase: Bool {

@@ -77,7 +77,7 @@ class EventResponse(BaseModel):
         return {
             "pending": "Ожидает подтверждения",
             "approved": "Подтверждено",
-            "active": "Активно",
+            "active": "Началось",
             "attendance": "attendance",
             "rejected": "Отклонено",
             "cancelled": "Отменено",

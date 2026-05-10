@@ -152,7 +152,8 @@ struct HomePageView: View {
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime]
         return myEventsModel.events.first { event in
-            guard event.status?.lowercased() == "active" else { return false }
+            let s = event.status?.lowercased() ?? ""
+            guard s == "active" || s == "активно" || s == "началось" else { return false }
             let end = event.endsAt.flatMap { isoFormatter.date(from: $0) }
                 ?? isoFormatter.date(from: event.startsAt)
                 ?? Date.distantPast

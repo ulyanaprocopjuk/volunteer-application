@@ -389,6 +389,7 @@ enum EventModerationStatus {
             || value.contains("rating")
             || value.contains("оценка")
             || value.contains("актив")
+            || value.contains("началось")
             || value.contains("published")
             || value.contains("подтверж") {
             self = .approved
