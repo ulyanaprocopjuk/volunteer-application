@@ -520,14 +520,14 @@ class TelegramAdminBot:
 
         if text == "/time":
             response_text = f"Текущее время: {time_text}"
-        elif text.startswith("/listOrg"):
-            search_query = text[len("/listOrg"):].strip()
+        elif text.startswith("/list_org"):
+            search_query = text[len("/list_org"):].strip()
             response_text = self._list_organizations(search_query)
-        elif text.startswith("/verifyOrg"):
-            arg = text[len("/verifyOrg"):].strip()
+        elif text.startswith("/verify_org"):
+            arg = text[len("/verify_org"):].strip()
             response_text = self._verify_organization(arg)
-        elif text.startswith("/listProfile"):
-            search_query = text[len("/listProfile"):].strip()
+        elif text.startswith("/list_profile"):
+            search_query = text[len("/list_profile"):].strip()
             response_text = self._list_profiles(search_query)
         elif text.startswith("/ban"):
             arg = text[len("/ban"):].strip()
@@ -754,13 +754,13 @@ class TelegramAdminBot:
 
     async def _register_commands(self) -> None:
         commands = [
-            {"command": "time",        "description": "Текущее время сервера"},
-            {"command": "listProfile", "description": "Список всех профилей"},
-            {"command": "listOrg",     "description": "Список организаций"},
-            {"command": "verifyOrg",   "description": "Подтвердить организацию по ID профиля"},
-            {"command": "ban",         "description": "Заблокировать аккаунт по ID профиля"},
-            {"command": "unban",       "description": "Снять блокировку/заморозку по ID профиля"},
-            {"command": "freeze",      "description": "Заморозить аккаунт на N минут по ID профиля"},
+            {"command": "time",         "description": "Текущее время сервера"},
+            {"command": "list_profile", "description": "Список всех профилей"},
+            {"command": "list_org",     "description": "Список организаций"},
+            {"command": "verify_org",   "description": "Подтвердить организацию по ID профиля"},
+            {"command": "ban",          "description": "Заблокировать аккаунт по ID профиля"},
+            {"command": "unban",        "description": "Снять блокировку/заморозку по ID профиля"},
+            {"command": "freeze",       "description": "Заморозить аккаунт на N минут по ID профиля"},
         ]
         await self._safe_api("setMyCommands", {"commands": json.dumps(commands, ensure_ascii=False)})
 
