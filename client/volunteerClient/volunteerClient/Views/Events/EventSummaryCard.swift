@@ -1,10 +1,27 @@
 import SwiftUI
 
+struct EventRatingRewardBadgeIcon: View {
+    var size: CGFloat = 28
+    var symbolSize: CGFloat = 13
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 255/255, green: 214/255, blue: 0/255))
+                .frame(width: size, height: size)
+                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+
+            Image(systemName: "star.fill")
+                .font(.system(size: symbolSize, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .accessibilityLabel("Событие от подтвержденной организации")
+    }
+}
+
 struct EventSummaryCard: View {
     let event: EventResponse
     var showFullDescription: Bool = false
-
-    @State private var showRatingPointsTooltip = false
 
     private var moderationStatus: EventModerationStatus {
         EventModerationStatus(rawValue: event.status)
@@ -12,17 +29,23 @@ struct EventSummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topTrailing) {
             HStack(alignment: .top, spacing: 14) {
                 eventThumbnail
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(event.title)
-                        .font(.system(size: 20, weight: .bold, design: .serif))
-                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(event.title)
+                            .font(.system(size: 20, weight: .bold, design: .serif))
+                            .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if event.ratingPoints != nil {
+                            EventRatingRewardBadgeIcon()
+                        }
+                    }
 
                     HStack(spacing: 8) {
                         Text("Статус:")
@@ -35,11 +58,6 @@ struct EventSummaryCard: View {
                     }
                 }
             }
-
-            if let points = event.ratingPoints {
-                ratingBadge(points: points)
-            }
-            } // ZStack
 
             if !directionText.isEmpty {
                 HStack(spacing: 8) {
@@ -64,7 +82,7 @@ struct EventSummaryCard: View {
                             .lineLimit(showFullDescription ? nil : 3)
                     }
                     if let points = event.ratingPoints {
-                        Text("Количество очков за участие в этом событии: 50")
+                        Text("Количество очков за участие в этом событии: \(points)")
                             .font(.system(size: 14, weight: .regular, design: .serif))
                             .foregroundColor(.black.opacity(0.50))
                     }
@@ -100,37 +118,6 @@ struct EventSummaryCard: View {
         }
         .padding(20)
         .background(Color.white)
-    }
-
-    private func ratingBadge(points: Int) -> some View {
-        ZStack(alignment: .trailing) {
-            if showRatingPointsTooltip {
-                Text("+20% к рейтингу")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color(red: 44/255, green: 67/255, blue: 102/255)))
-                    .padding(.trailing, 34)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
-            }
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    showRatingPointsTooltip.toggle()
-                }
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color(red: 255/255, green: 214/255, blue: 0/255))
-                        .frame(width: 28, height: 28)
-                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                }
-            }
-            .buttonStyle(.plain)
-        }
     }
 
     private func infoRow(icon: String, text: String) -> some View {

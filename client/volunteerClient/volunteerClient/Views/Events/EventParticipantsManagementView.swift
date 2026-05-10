@@ -499,6 +499,7 @@ private struct ParticipantProfileDetailsView: View {
     let profileAPI: ProfileAPIProtocol
 
     private var isOrganization: Bool { profile.type == "organization" }
+    private var isVolunteer: Bool { !isOrganization }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -508,6 +509,12 @@ private struct ParticipantProfileDetailsView: View {
                 VStack(spacing: 0) {
                     avatarSection
                         .padding(.top, 24)
+
+                    if isVolunteer, let rating = profile.rating {
+                        ratingBlock(rating: rating)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 18)
+                    }
 
                     VStack(alignment: .leading, spacing: 22) {
                         if isOrganization {
@@ -519,12 +526,14 @@ private struct ParticipantProfileDetailsView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 28)
 
-                    RatingHistorySection(
-                        profileID: profile.id,
-                        session: session,
-                        profileAPI: profileAPI
-                    )
-                    .padding(.top, 28)
+                    if isVolunteer {
+                        RatingHistorySection(
+                            profileID: profile.id,
+                            session: session,
+                            profileAPI: profileAPI
+                        )
+                        .padding(.top, 28)
+                    }
                 }
                 .padding(.bottom, 24)
             }
@@ -628,9 +637,6 @@ private struct ParticipantProfileDetailsView: View {
             ReadOnlyField(title: "Местонахождение", value: profile.locationText)
             ReadOnlySkillsField(title: "Навыки", values: profile.skills ?? [])
             ReadOnlyMultilineField(title: "Обо мне", value: profile.about ?? "")
-            if let rating = profile.rating {
-                ratingBlock(rating: rating)
-            }
         }
     }
 
@@ -640,9 +646,6 @@ private struct ParticipantProfileDetailsView: View {
             ReadOnlyField(title: "Телефон", value: profile.phone ?? "")
             ReadOnlyField(title: "Местонахождение", value: profile.locationText)
             ReadOnlyMultilineField(title: "О нас", value: profile.about ?? "")
-            if let rating = profile.rating {
-                ratingBlock(rating: rating)
-            }
         }
     }
 

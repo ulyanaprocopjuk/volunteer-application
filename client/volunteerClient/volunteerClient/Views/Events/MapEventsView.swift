@@ -688,11 +688,18 @@ private struct EventFeedSummaryCard: View {
             thumbnail
 
             VStack(alignment: .leading, spacing: 7) {
-                Text(displayTitle)
-                    .font(.system(size: 17, weight: .bold, design: .serif))
-                    .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: 8) {
+                    Text(displayTitle)
+                        .font(.system(size: 17, weight: .bold, design: .serif))
+                        .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if event.ratingPoints != nil {
+                        EventRatingRewardBadgeIcon(size: 24, symbolSize: 11)
+                    }
+                }
 
                 if !directionText.isEmpty {
                     Text(directionText)
@@ -868,6 +875,11 @@ private struct EventMapPreviewCard: View {
             }
 
             Spacer(minLength: 8)
+
+            if event.ratingPoints != nil {
+                EventRatingRewardBadgeIcon(size: 24, symbolSize: 11)
+                    .padding(.top, 1)
+            }
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))

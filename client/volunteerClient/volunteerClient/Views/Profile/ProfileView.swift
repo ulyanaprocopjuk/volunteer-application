@@ -95,7 +95,7 @@ struct ProfileView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 28)
 
-                if let pid = model.profileID {
+                if model.isVolunteer, let pid = model.profileID {
                     RatingHistorySection(
                         profileID: pid,
                         session: model.appSession,
@@ -104,7 +104,7 @@ struct ProfileView: View {
                     .padding(.top, 28)
                 }
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, TabBarLayout.height + TabBarLayout.contentSpacing + 24)
         }
     }
 
@@ -261,7 +261,7 @@ struct ProfileView: View {
 
         return HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Ваш текущий рейтинг")
+                Text("Ваш рейтинг")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.gray)
 

@@ -258,12 +258,7 @@ struct EventDetailsView: View {
 
     private var eventCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topTrailing) {
-                topBlock
-                if let points = event.ratingPoints {
-                    ratingBadge(points: points)
-                }
-            }
+            topBlock
 
             if !displayDirection.isEmpty {
                 directionRow
@@ -279,7 +274,7 @@ struct EventDetailsView: View {
                             .lineSpacing(8)
                     }
                     if let points = event.ratingPoints {
-                        Text("Количество очков за участие в этом событии: 50")
+                        Text("Количество очков за участие в этом событии: \(points)")
                             .font(.system(size: 13, weight: .regular, design: .serif))
                             .foregroundColor(.black.opacity(0.50))
                     }
@@ -369,16 +364,7 @@ struct EventDetailsView: View {
                     showRatingPointsTooltip.toggle()
                 }
             } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color(red: 255/255, green: 214/255, blue: 0/255))
-                        .frame(width: 28, height: 28)
-                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
-
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                }
+                EventRatingRewardBadgeIcon()
             }
             .buttonStyle(.plain)
         }
@@ -400,7 +386,9 @@ struct EventDetailsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 0)
+            if let points = event.ratingPoints {
+                ratingBadge(points: points)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

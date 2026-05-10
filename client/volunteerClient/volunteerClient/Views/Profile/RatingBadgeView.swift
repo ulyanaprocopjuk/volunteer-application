@@ -6,17 +6,10 @@ struct RatingBadgeView: View {
     private var tier: RatingTier { RatingTier(rating: rating) }
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(tier.imageName)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 80, height: 80)
-
-            Text(tier.title)
-                .font(.system(size: 13, weight: .semibold, design: .serif))
-                .foregroundColor(tier.color)
-                .multilineTextAlignment(.center)
-        }
+        Image(tier.imageName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 80, height: 80)
     }
 }
 

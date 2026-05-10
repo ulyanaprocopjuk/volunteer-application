@@ -247,7 +247,9 @@ struct MyEventCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 0)
+            if event.ratingPoints != nil {
+                EventRatingRewardBadgeIcon()
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
