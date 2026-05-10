@@ -34,6 +34,7 @@ protocol EventAPIProtocol {
     func uploadMessagePhoto(data: Data, token: String) async throws -> String
     func fetchChats(eventID: String, token: String) async throws -> [ChatRoom]
     func fetchChatMessages(eventID: String, chatID: Int, token: String) async throws -> [ChatMessage]
+    func fetchChatParticipants(eventID: String, chatID: Int, token: String) async throws -> [EventParticipantResponse]
     func sendChatMessage(eventID: String, chatID: Int, content: String?, photoURL: String?, token: String) async throws -> ChatMessage
     func finishEvent(id: String, token: String) async throws -> EventResponse
     func fetchRatableProfiles(eventID: String, token: String) async throws -> [RatableProfile]
@@ -452,6 +453,15 @@ final class EventAPI: EventAPIProtocol {
         let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
         try validate(response: response, data: data)
         return try JSONDecoder().decode([ChatMessage].self, from: data)
+    }
+
+    func fetchChatParticipants(eventID: String, chatID: Int, token: String) async throws -> [EventParticipantResponse] {
+        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("api/events/\(eventID)/chats/\(chatID)/participants"))
+        urlRequest.httpMethod = "GET"
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await NetworkRequestExecutor.data(for: urlRequest, session: session)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode([EventParticipantResponse].self, from: data)
     }
 
     func sendChatMessage(eventID: String, chatID: Int, content: String?, photoURL: String?, token: String) async throws -> ChatMessage {

@@ -4,6 +4,7 @@ struct MyEventsView: View {
     @ObservedObject var viewModel: MyEventsViewModel
     let session: AppSession
     var onEventCancelled: (() -> Void)? = nil
+    var onRatingCompleted: (() -> Void)? = nil
     let onCreateEvent: () -> Void
 
     @State private var selectedEvent: EventResponse?
@@ -59,10 +60,19 @@ struct MyEventsView: View {
             Text(viewModel.errorMessage ?? "")
         }
         .fullScreenCover(item: $selectedEvent) { event in
-            EventDetailsView(event: event, session: session, onEventCancelled: {
-                selectedEvent = nil
-                onEventCancelled?()
-            })
+            EventDetailsView(
+                event: event,
+                session: session,
+                forceHideActions: selectedSegment == .history,
+                onEventCancelled: {
+                    selectedEvent = nil
+                    onEventCancelled?()
+                },
+                onRatingCompleted: {
+                    selectedEvent = nil
+                    onRatingCompleted?()
+                }
+            )
         }
     }
 
@@ -247,7 +257,7 @@ struct MyEventCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if event.ratingPoints != nil {
+            if event.shouldShowRatingRewardBadge {
                 EventRatingRewardBadgeIcon()
             }
         }

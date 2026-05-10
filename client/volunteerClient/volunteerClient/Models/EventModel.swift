@@ -41,6 +41,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     let presentCount: Int?
     let groupCount: Int?
     let isOrganizerVerified: Bool?
+    let organizerType: String?
     let ratingPoints: Int?
 
     init(
@@ -67,6 +68,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         presentCount: Int? = nil,
         groupCount: Int? = nil,
         isOrganizerVerified: Bool? = nil,
+        organizerType: String? = nil,
         ratingPoints: Int? = nil
     ) {
         self.id = id
@@ -92,6 +94,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         self.presentCount = presentCount
         self.groupCount = groupCount
         self.isOrganizerVerified = isOrganizerVerified
+        self.organizerType = organizerType
         self.ratingPoints = ratingPoints
     }
 
@@ -119,7 +122,14 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         case presentCount = "present_count"
         case groupCount = "group_count"
         case isOrganizerVerified = "is_organizer_verified"
+        case organizerType = "organizer_type"
         case ratingPoints = "rating_points"
+    }
+}
+
+extension EventResponse {
+    var shouldShowRatingRewardBadge: Bool {
+        organizerType == "organization" && isOrganizerVerified == true && ratingPoints != nil
     }
 }
 

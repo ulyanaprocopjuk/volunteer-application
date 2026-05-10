@@ -70,6 +70,7 @@ class EventResponse(BaseModel):
     present_count: int | None = Field(default=None)
     group_count: int | None = Field(default=None)
     is_organizer_verified: bool = Field(default=False)
+    organizer_type: str | None = Field(default=None)
     rating_points: int = Field(default=50)
 
     @field_validator("status")

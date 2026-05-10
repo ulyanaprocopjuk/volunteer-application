@@ -3,12 +3,18 @@ import Combine
 
 struct SearchEventsView: View {
     private let session: AppSession?
+    private let onRatingCompleted: () -> Void
     @StateObject private var viewModel: SearchEventsViewModel
     @State private var searchText = ""
     @State private var selectedEvent: EventResponse?
 
-    init(session: AppSession? = nil, api: EventAPIProtocol? = nil) {
+    init(
+        session: AppSession? = nil,
+        api: EventAPIProtocol? = nil,
+        onRatingCompleted: @escaping () -> Void = {}
+    ) {
         self.session = session
+        self.onRatingCompleted = onRatingCompleted
         _viewModel = StateObject(wrappedValue: SearchEventsViewModel(api: api))
     }
 
@@ -41,7 +47,14 @@ struct SearchEventsView: View {
             Text(viewModel.errorMessage ?? "")
         }
         .fullScreenCover(item: $selectedEvent) { event in
-            EventDetailsView(event: event, session: session)
+            EventDetailsView(
+                event: event,
+                session: session,
+                onRatingCompleted: {
+                    selectedEvent = nil
+                    onRatingCompleted()
+                }
+            )
         }
     }
 

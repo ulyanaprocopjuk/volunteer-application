@@ -76,46 +76,34 @@ private struct FaceButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                Circle()
-                    .fill(isSelected ? activeColor.opacity(0.12) : Color(.systemGray5))
-                    .frame(width: size, height: size)
-                    .overlay(
-                        Circle()
-                            .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: isSelected ? 2 : 1.5)
-                    )
-
-                // face outline circle
-                Circle()
-                    .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth)
-                    .frame(width: size * 0.62, height: size * 0.62)
-
-                // face details
                 Group {
                     switch mood {
                     case .sad:
                         SadFaceShape()
                             .fill(isSelected ? activeColor : Color(.systemGray3))
-                            .frame(width: size * 0.62, height: size * 0.62)
+                            .frame(width: size, height: size)
                         SadFaceShape()
                             .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth * 0.8)
-                            .frame(width: size * 0.62, height: size * 0.62)
+                            .frame(width: size, height: size)
                     case .neutral:
                         NeutralFaceShape()
                             .fill(isSelected ? activeColor : Color(.systemGray3))
-                            .frame(width: size * 0.62, height: size * 0.62)
+                            .frame(width: size, height: size)
                         NeutralFaceShape()
                             .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth * 0.8)
-                            .frame(width: size * 0.62, height: size * 0.62)
+                            .frame(width: size, height: size)
                     case .happy:
                         HappyFaceShape()
                             .fill(isSelected ? activeColor : Color(.systemGray3))
-                            .frame(width: size * 0.62, height: size * 0.62)
+                            .frame(width: size, height: size)
                         HappyFaceShape()
                             .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth * 0.8)
-                            .frame(width: size * 0.62, height: size * 0.62)
+                            .frame(width: size, height: size)
                     }
                 }
             }
+            .frame(width: size, height: size)
+            .scaleEffect(isSelected ? 1.12 : 1)
         }
         .buttonStyle(.plain)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
@@ -140,7 +128,7 @@ struct EventRatingView: View {
     @State private var errorMessage: String?
 
     private let navy = Color(red: 44/255, green: 67/255, blue: 102/255)
-    private let faceSize: CGFloat = 54
+    private let faceSize: CGFloat = 27
 
     var body: some View {
         VStack(spacing: 0) {
@@ -319,18 +307,11 @@ struct EventRatingView: View {
         return Button {
             selectedScores[profileID] = isSelected ? nil : eventRatingPoints
         } label: {
-            ZStack {
-                Circle()
-                    .fill(isSelected ? yellow.opacity(0.18) : Color(.systemGray5))
-                    .frame(width: faceSize, height: faceSize)
-                    .overlay(
-                        Circle()
-                            .stroke(isSelected ? yellow : Color(.systemGray3), lineWidth: isSelected ? 2 : 1.5)
-                    )
-                Image(systemName: "star.fill")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(isSelected ? yellow : Color(.systemGray3))
-            }
+            Image(systemName: "star.fill")
+                .font(.system(size: faceSize, weight: .bold))
+                .foregroundColor(isSelected ? yellow : Color(.systemGray3))
+                .frame(width: faceSize, height: faceSize)
+                .scaleEffect(isSelected ? 1.12 : 1)
         }
         .buttonStyle(.plain)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)

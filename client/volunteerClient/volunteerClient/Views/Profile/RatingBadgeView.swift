@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RatingBadgeView: View {
     let rating: Int
+    var size: CGFloat = 60
 
     private var tier: RatingTier { RatingTier(rating: rating) }
 
@@ -9,7 +10,7 @@ struct RatingBadgeView: View {
         Image(tier.imageName)
             .resizable()
             .scaledToFit()
-            .frame(width: 80, height: 80)
+            .frame(width: size, height: size)
     }
 }
 

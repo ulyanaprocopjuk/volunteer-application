@@ -57,12 +57,19 @@ struct HomePageView: View {
                     ActiveEventBanner(event: event) {
                         selectedActiveEvent = event
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 60)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
                 }
             }
             .fullScreenCover(item: $selectedActiveEvent) { event in
-                EventDetailsView(event: event, session: session)
+                EventDetailsView(
+                    event: event,
+                    session: session,
+                    onRatingCompleted: {
+                        selectedActiveEvent = nil
+                        selectedTab = .map
+                    }
+                )
             }
             .task {
                 await profileModel.loadMyProfileIfNeeded()
@@ -132,17 +139,26 @@ struct HomePageView: View {
                         isNotificationsPresented = true
                     }
                 },
+                onRatingCompleted: {
+                    selectedTab = .map
+                },
                 hasNotifications: notificationModel.hasNotifications
             )
 
         case .explore:
-            SearchEventsView(session: session)
+            SearchEventsView(
+                session: session,
+                onRatingCompleted: {
+                    selectedTab = .map
+                }
+            )
 
         case .events:
             MyEventsView(
                 viewModel: myEventsModel,
                 session: session,
                 onEventCancelled: { selectedTab = .map },
+                onRatingCompleted: { selectedTab = .map },
                 onCreateEvent: { isEventFormPresented = true }
             )
         }
@@ -183,20 +199,20 @@ private struct ActiveEventBanner: View {
                 ZStack {
                     Circle()
                         .fill(Color.green.opacity(0.2))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 14, height: 14)
+                        .frame(width: 16, height: 16)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Событие идёт сейчас")
-                        .font(.system(size: 12, weight: .regular))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundColor(.white.opacity(0.72))
 
                     let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
                     Text(title.isEmpty ? "Без названия" : title)
-                        .font(.system(size: 16, weight: .semibold, design: .serif))
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
                         .foregroundColor(.white)
                         .lineLimit(1)
                 }
@@ -207,12 +223,12 @@ private struct ActiveEventBanner: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white.opacity(0.65))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
             .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
-                    .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 6)
+                    .shadow(color: .black.opacity(0.22), radius: 16, x: 0, y: 6)
             )
         }
         .buttonStyle(.plain)

@@ -307,6 +307,16 @@ def list_chat_messages(
     return event_service.get_chat_messages(db, event_id, chat_id, current_user)
 
 
+@router.get("/{event_id}/chats/{chat_id}/participants", response_model=list[EventParticipantResponse])
+def list_chat_participants(
+    event_id: str,
+    chat_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    return event_service.get_chat_participants(db, event_id, chat_id, current_user)
+
+
 @router.post("/{event_id}/chats/{chat_id}/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 def send_chat_message(
     event_id: str,

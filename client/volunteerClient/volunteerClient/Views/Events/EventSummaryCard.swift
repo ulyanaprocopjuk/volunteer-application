@@ -42,7 +42,7 @@ struct EventSummaryCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        if event.ratingPoints != nil {
+                        if event.shouldShowRatingRewardBadge {
                             EventRatingRewardBadgeIcon()
                         }
                     }
@@ -72,7 +72,7 @@ struct EventSummaryCard: View {
                 .padding(.top, 18)
             }
 
-            if !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || event.ratingPoints != nil {
+            if !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || event.shouldShowRatingRewardBadge {
                 VStack(alignment: .leading, spacing: 6) {
                     if !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(event.description)
@@ -81,7 +81,7 @@ struct EventSummaryCard: View {
                             .lineSpacing(7)
                             .lineLimit(showFullDescription ? nil : 3)
                     }
-                    if let points = event.ratingPoints {
+                    if event.shouldShowRatingRewardBadge, let points = event.ratingPoints {
                         Text("Количество очков за участие в этом событии: \(points)")
                             .font(.system(size: 14, weight: .regular, design: .serif))
                             .foregroundColor(.black.opacity(0.50))

@@ -438,6 +438,12 @@ class EventService:
         if normalized_status not in ("approved", "active"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event cannot be started")
 
+        if self._accepted_count(db, event_id) < event.volunteers_needed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Not enough participants to start event",
+            )
+
         creator_profile = db.scalar(select(Profile).where(Profile.user_id == user.id))
         accepted_applications = db.scalars(
             select(EventApplication).where(
@@ -928,17 +934,18 @@ class EventService:
         if user_group is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
+        leader_chat_title = "Чат с организатором" if user_is_leader else "Чат лидеров"
         result = [
             ChatRoomResponse(
                 id=user_group.group_number,
                 event_id=event_id,
                 type="group",
                 group_number=user_group.group_number,
-                title=f"Группа {user_group.group_number}",
+                title=f"Чат группы {user_group.group_number}",
             )
         ]
         if user_is_leader:
-            result.append(ChatRoomResponse(id=LEADERS_CHAT_ID, event_id=event_id, type="leaders", title="Чат лидеров"))
+            result.append(ChatRoomResponse(id=LEADERS_CHAT_ID, event_id=event_id, type="leaders", title=leader_chat_title))
 
         return result
 
@@ -961,6 +968,66 @@ class EventService:
         groups = self._get_event_groups(db, event_id)
         organizer_profile_id = self._organizer_profile_id(db, event)
         return [self._build_message_response(message, organizer_profile_id, groups, chat_id) for message in messages]
+
+    def get_chat_participants(
+        self,
+        db: Session,
+        event_id: str,
+        chat_id: int,
+        user: User,
+    ) -> list[EventParticipantResponse]:
+        event = self.get_event(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+        if (event.status or "").strip().lower() != "active":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chat is only available for active events")
+
+        self._validate_chat_access(db, event, chat_id, user)
+
+        groups = self._get_event_groups(db, event_id)
+        applications = db.scalars(
+            select(EventApplication)
+            .where(
+                EventApplication.event_id == event_id,
+                EventApplication.status == EventApplicationStatus.accepted,
+            )
+            .order_by(EventApplication.created_at.asc())
+        ).all()
+        applications_by_profile = {application.volunteer_id: application for application in applications}
+
+        result: list[EventParticipantResponse] = []
+        seen_profile_ids: set[int] = set()
+
+        def add_profile(profile: Profile | None) -> None:
+            if profile is None or profile.id in seen_profile_ids:
+                return
+            seen_profile_ids.add(profile.id)
+            application = applications_by_profile.get(profile.id)
+            result.append(self._chat_participant_response(profile, event, application.id if application else None))
+
+        organizer_profile = db.scalar(select(Profile).where(Profile.user_id == event.creator_id))
+
+        if not groups or len(groups) == 1 or chat_id == 0:
+            add_profile(organizer_profile)
+            for application in applications:
+                add_profile(application.volunteer)
+            return result
+
+        if chat_id == LEADERS_CHAT_ID:
+            add_profile(organizer_profile)
+            for group in groups:
+                add_profile(group.leader)
+            return result
+
+        target_group = next((group for group in groups if group.group_number == chat_id), None)
+        if target_group is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+
+        add_profile(target_group.leader)
+        for member in target_group.members:
+            add_profile(member.profile)
+        return result
 
     def send_chat_message(
         self,
@@ -1297,6 +1364,7 @@ class EventService:
         response.is_creator = user is not None and event.creator_id == user.id
         response.user_application_status = self._user_application_status(db, event.id, user)
         response.is_organizer_verified = self._organizer_is_verified(event.creator)
+        response.organizer_type = self._organizer_type(event.creator)
         return response
 
     @staticmethod
@@ -1304,6 +1372,13 @@ class EventService:
         if user is None or user.profile is None:
             return False
         return bool(user.profile.is_verified)
+
+    @staticmethod
+    def _organizer_type(user: User | None) -> str | None:
+        if user is None or user.profile is None:
+            return None
+        profile_type = user.profile.type
+        return profile_type.value if hasattr(profile_type, "value") else str(profile_type)
 
     def _review_application(
         self,
@@ -1537,6 +1612,21 @@ class EventService:
             status=application.status.value,
             is_creator=application.volunteer.user_id == event.creator_id,
             profile=application.volunteer,
+        )
+
+    @staticmethod
+    def _chat_participant_response(
+        profile: Profile,
+        event: Event,
+        application_id: int | None,
+    ) -> EventParticipantResponse:
+        return EventParticipantResponse(
+            application_id=application_id if application_id is not None else -profile.id,
+            event_id=event.id,
+            event_title=event.title,
+            status=EventApplicationStatus.accepted.value,
+            is_creator=profile.user_id == event.creator_id,
+            profile=profile,
         )
 
     @staticmethod

@@ -22,18 +22,24 @@ struct EventDetailsView: View {
     @State private var showRatingPointsTooltip = false
 
     private let eventImageSize: CGFloat = 56
+    private let forceHideActions: Bool
 
     private let onEventCancelled: (() -> Void)?
+    private let onRatingCompleted: (() -> Void)?
 
     init(
         event: EventResponse,
         session: AppSession? = nil,
         api: EventAPIProtocol? = nil,
-        onEventCancelled: (() -> Void)? = nil
+        forceHideActions: Bool = false,
+        onEventCancelled: (() -> Void)? = nil,
+        onRatingCompleted: (() -> Void)? = nil
     ) {
         self.session = session
         self.api = api ?? EventAPI(baseURL: URL(string: AppConfig.baseURLString)!)
+        self.forceHideActions = forceHideActions
         self.onEventCancelled = onEventCancelled
+        self.onRatingCompleted = onRatingCompleted
         _currentEvent = State(initialValue: event)
     }
 
@@ -55,6 +61,17 @@ struct EventDetailsView: View {
             }
         }
         .background(Color.white.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if shouldShowBottomFinishButton {
+                VStack(spacing: 0) {
+                    Divider()
+                    finishEventButton
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                }
+                .background(Color.white)
+            }
+        }
         .task {
             await loadEventDetails()
         }
@@ -95,17 +112,20 @@ struct EventDetailsView: View {
         } message: {
             Text("Укажите причину. Все участники получат уведомление.")
         }
-        .overlay {
+        .overlay(alignment: .top) {
             if let message {
                 Text(message)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
                     .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(Color.black.opacity(0.84))
                     )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                     .transition(.opacity)
             }
         }
@@ -164,6 +184,7 @@ struct EventDetailsView: View {
                             currentEvent = updatedEvent
                         }
                         dismiss()
+                        onRatingCompleted?()
                     }
                 )
             }
@@ -203,7 +224,7 @@ struct EventDetailsView: View {
                     .foregroundColor(.black.opacity(0.78))
                     .frame(maxWidth: .infinity)
 
-                if event.isCreator == true, session != nil {
+                if shouldShowOrganizerHeaderActions {
                     HStack(spacing: 10) {
                         listButton
                         if isAlmostStarting {
@@ -265,7 +286,7 @@ struct EventDetailsView: View {
                     .padding(.top, 18)
             }
 
-            if !displayDescription.isEmpty || event.ratingPoints != nil {
+            if !displayDescription.isEmpty || event.shouldShowRatingRewardBadge {
                 VStack(alignment: .leading, spacing: 6) {
                     if !displayDescription.isEmpty {
                         Text(displayDescription)
@@ -273,7 +294,7 @@ struct EventDetailsView: View {
                             .foregroundColor(.black.opacity(0.62))
                             .lineSpacing(8)
                     }
-                    if let points = event.ratingPoints {
+                    if event.shouldShowRatingRewardBadge, let points = event.ratingPoints {
                         Text("Количество очков за участие в этом событии: \(points)")
                             .font(.system(size: 13, weight: .regular, design: .serif))
                             .foregroundColor(.black.opacity(0.50))
@@ -293,7 +314,7 @@ struct EventDetailsView: View {
                     .padding(.top, 22)
             }
 
-            if event.isCreator == true,
+            if shouldShowOrganizerStartActions,
                !isActivePhase,
                (isAlmostStarting || isInAttendancePhase || isInGroupingPhase),
                session != nil {
@@ -301,12 +322,13 @@ struct EventDetailsView: View {
                     .padding(.top, 22)
             }
 
-            if isActivePhase, event.isCreator == true, session != nil {
-                organizerActiveRow
+            if shouldShowOrganizerGroupEditButton {
+                organizerGroupEditButton
                     .padding(.top, 22)
             }
 
-            if isActivePhase, session != nil,
+            if shouldShowActions,
+               isActivePhase, session != nil,
                event.userApplicationStatus == "accepted" {
                 chatButton
                     .padding(.top, 22)
@@ -386,7 +408,7 @@ struct EventDetailsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let points = event.ratingPoints {
+            if event.shouldShowRatingRewardBadge, let points = event.ratingPoints {
                 ratingBadge(points: points)
             }
         }
@@ -570,16 +592,17 @@ struct EventDetailsView: View {
             } label: {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                        .fill(organizerStartButtonBackground)
 
                     Text(isInGroupingPhase ? "Расстановка групп" : isInAttendancePhase ? "Продолжить отметку" : "Начать")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(organizerStartButtonForeground)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
             }
             .buttonStyle(.plain)
+            .disabled(isOrganizerStartButtonDisabled)
 
             Button {
                 cancelEventReason = ""
@@ -605,42 +628,42 @@ struct EventDetailsView: View {
         }
     }
 
-    private var organizerActiveRow: some View {
-        VStack(spacing: 10) {
-            Button {
-                showsGroupFlow = true
-            } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
-                    Text("Редактировать группы")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
+    private var organizerGroupEditButton: some View {
+        Button {
+            showsGroupFlow = true
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                Text("Редактировать группы")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
             }
-            .buttonStyle(.plain)
-
-            Button {
-                showsFinishAlert = true
-            } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.5), lineWidth: 1)
-                        )
-                    Text("Завершить событие")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
-            }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
         }
+        .buttonStyle(.plain)
+    }
+
+    private var finishEventButton: some View {
+        Button {
+            showsFinishAlert = true
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color(red: 0.80, green: 0.20, blue: 0.20).opacity(0.5), lineWidth: 1)
+                    )
+                Text("Завершить событие")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(Color(red: 0.80, green: 0.20, blue: 0.20))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+        }
+        .buttonStyle(.plain)
     }
 
     private var isAlmostStarting: Bool {
@@ -665,6 +688,55 @@ struct EventDetailsView: View {
     private var isInRatingPhase: Bool {
         let s = event.status?.lowercased() ?? ""
         return s == "rating" || s == "оценка участников"
+    }
+
+    private var isEventInProgress: Bool {
+        isInAttendancePhase || isInGroupingPhase || isActivePhase || isInRatingPhase
+    }
+
+    private var isHistoryStatus: Bool {
+        switch EventModerationStatus(rawValue: event.status) {
+        case .rejected, .cancelled, .completed:
+            return true
+        case .pending, .approved:
+            return false
+        }
+    }
+
+    private var shouldShowActions: Bool {
+        !forceHideActions && !isHistoryStatus
+    }
+
+    private var shouldShowOrganizerHeaderActions: Bool {
+        shouldShowActions && event.isCreator == true && session != nil
+    }
+
+    private var shouldShowOrganizerStartActions: Bool {
+        shouldShowActions && event.isCreator == true
+    }
+
+    private var shouldShowOrganizerGroupEditButton: Bool {
+        shouldShowActions && isActivePhase && event.isCreator == true && session != nil
+    }
+
+    private var shouldShowBottomFinishButton: Bool {
+        shouldShowActions && isActivePhase && event.isCreator == true && session != nil
+    }
+
+    private var isOrganizerStartButtonDisabled: Bool {
+        !isInAttendancePhase
+            && !isInGroupingPhase
+            && acceptedParticipants < event.volunteersNeeded
+    }
+
+    private var organizerStartButtonBackground: Color {
+        isOrganizerStartButtonDisabled
+            ? Color.gray.opacity(0.28)
+            : Color(red: 44/255, green: 67/255, blue: 102/255)
+    }
+
+    private var organizerStartButtonForeground: Color {
+        isOrganizerStartButtonDisabled ? .black.opacity(0.42) : .white
     }
 
     private var participationButtonBackground: Color {
@@ -780,7 +852,9 @@ struct EventDetailsView: View {
     }
 
     private var shouldShowParticipationButton: Bool {
-        event.isCreator != true
+        shouldShowActions
+            && !isEventInProgress
+            && event.isCreator != true
     }
 
     private var isParticipationButtonDisabled: Bool {

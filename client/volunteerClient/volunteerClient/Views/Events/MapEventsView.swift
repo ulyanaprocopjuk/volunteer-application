@@ -6,6 +6,7 @@ import Combine
 struct MapEventsView: View {
     var onCreateEventTap: () -> Void = {}
     var onNotificationsTap: () -> Void = {}
+    var onRatingCompleted: () -> Void = {}
     var hasNotifications: Bool = false
 
     @StateObject private var viewModel: MapEventsViewModel
@@ -18,10 +19,12 @@ struct MapEventsView: View {
         session: AppSession? = nil,
         onCreateEventTap: @escaping () -> Void = {},
         onNotificationsTap: @escaping () -> Void = {},
+        onRatingCompleted: @escaping () -> Void = {},
         hasNotifications: Bool = false
     ) {
         self.onCreateEventTap = onCreateEventTap
         self.onNotificationsTap = onNotificationsTap
+        self.onRatingCompleted = onRatingCompleted
         self.hasNotifications = hasNotifications
         _viewModel = StateObject(wrappedValue: MapEventsViewModel(session: session))
     }
@@ -77,13 +80,21 @@ struct MapEventsView: View {
             Text(viewModel.errorMessage ?? "")
         }
         .fullScreenCover(item: $detailsEvent) { event in
-            EventDetailsView(event: event, session: viewModel.session)
+            EventDetailsView(
+                event: event,
+                session: viewModel.session,
+                onRatingCompleted: {
+                    detailsEvent = nil
+                    onRatingCompleted()
+                }
+            )
         }
         .fullScreenCover(isPresented: $isFullMapPresented) {
             FullScreenEventsMapView(
                 events: viewModel.events,
                 fallbackCoordinate: viewModel.mapCenterCoordinate,
-                session: viewModel.session
+                session: viewModel.session,
+                onRatingCompleted: onRatingCompleted
             )
         }
     }
@@ -407,6 +418,7 @@ private struct FullScreenEventsMapView: View {
     let events: [EventResponse]
     let fallbackCoordinate: CLLocationCoordinate2D
     let session: AppSession?
+    let onRatingCompleted: () -> Void
 
     @State private var selectedEvent: EventResponse?
     @State private var detailsEvent: EventResponse?
@@ -472,7 +484,15 @@ private struct FullScreenEventsMapView: View {
         }
         .background(Color.white.ignoresSafeArea())
         .fullScreenCover(item: $detailsEvent) { event in
-            EventDetailsView(event: event, session: session)
+            EventDetailsView(
+                event: event,
+                session: session,
+                onRatingCompleted: {
+                    detailsEvent = nil
+                    dismiss()
+                    onRatingCompleted()
+                }
+            )
         }
     }
 }
@@ -696,7 +716,7 @@ private struct EventFeedSummaryCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if event.ratingPoints != nil {
+                    if event.shouldShowRatingRewardBadge {
                         EventRatingRewardBadgeIcon(size: 24, symbolSize: 11)
                     }
                 }
@@ -876,7 +896,7 @@ private struct EventMapPreviewCard: View {
 
             Spacer(minLength: 8)
 
-            if event.ratingPoints != nil {
+            if event.shouldShowRatingRewardBadge {
                 EventRatingRewardBadgeIcon(size: 24, symbolSize: 11)
                     .padding(.top, 1)
             }

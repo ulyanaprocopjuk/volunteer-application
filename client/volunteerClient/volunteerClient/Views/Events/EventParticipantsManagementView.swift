@@ -2414,7 +2414,7 @@ struct EventChatView: View {
     private func loadParticipants() async {
         do {
             participants = try await session.performAuthorizedRequest { token in
-                try await api.fetchEventApplications(eventID: eventID, token: token)
+                try await api.fetchChatParticipants(eventID: eventID, chatID: chatRoom.id, token: token)
             }
         } catch { }
     }
