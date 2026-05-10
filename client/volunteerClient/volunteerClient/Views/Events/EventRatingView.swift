@@ -357,7 +357,7 @@ struct EventRatingView: View {
         defer { isSubmitting = false }
         do {
             let items = profiles.map { profile -> RatingItem in
-                let raw: Int = selectedScores[profile.profileID] ?? 0
+                let raw: Int = (selectedScores[profile.profileID] ?? nil) ?? 0
                 let score: Int
                 if raw == eventRatingPoints && isOrganizerVerified {
                     // Star selected: add % bonus on top of event points
