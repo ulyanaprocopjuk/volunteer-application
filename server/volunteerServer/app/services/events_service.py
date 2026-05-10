@@ -46,6 +46,14 @@ class EventService:
         creator_profile = self._profile_for_user(db, user)
         direction = self._direction_by_name(db, payload.direction)
 
+        is_verified_org = (
+            creator_profile.type == ProfileType.organization
+            and bool(creator_profile.is_verified)
+        )
+        rating_points = 50
+        if is_verified_org and payload.rating_points is not None:
+            rating_points = max(50, min(100, payload.rating_points))
+
         event = Event(
             creator_id=user.id,
             title=payload.title,
@@ -59,6 +67,7 @@ class EventService:
             starts_at=payload.starts_at,
             ends_at=payload.ends_at,
             volunteers_needed=payload.volunteers_needed,
+            rating_points=rating_points,
             status="pending",
         )
         event.directions.append(direction)

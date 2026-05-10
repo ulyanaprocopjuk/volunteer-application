@@ -19,6 +19,7 @@ class CreateEventRequest(BaseModel):
     starts_at: datetime = Field(alias="startsAt")
     ends_at: datetime | None = Field(default=None, alias="endsAt")
     volunteers_needed: int = Field(ge=1, le=100000, alias="volunteersNeeded")
+    rating_points: int | None = Field(default=None, ge=50, le=100, alias="ratingPoints")
 
     @field_validator("title", "direction", "description", "country", "city", "location_name")
     @classmethod
@@ -69,6 +70,7 @@ class EventResponse(BaseModel):
     present_count: int | None = Field(default=None)
     group_count: int | None = Field(default=None)
     is_organizer_verified: bool = Field(default=False)
+    rating_points: int = Field(default=50)
 
     @field_validator("status")
     @classmethod

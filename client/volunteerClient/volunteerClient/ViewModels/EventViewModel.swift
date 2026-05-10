@@ -23,6 +23,8 @@ final class EventViewModel: ObservableObject {
     @Published var eventPhotoImage: UIImage?
     @Published var organizerName = ""
     @Published var isOrganizerVerified = false
+    @Published var isVerifiedOrganization = false
+    @Published var ratingPoints = 50
 
     @Published var isSubmitting = false
     @Published var isProfileContextLoading = false
@@ -173,6 +175,7 @@ final class EventViewModel: ObservableObject {
             let city = canonicalCity(from: profile.city, in: country)
             organizerName = displayName(from: profile)
             isOrganizerVerified = profile.isVerified ?? false
+            isVerifiedOrganization = (profile.type == "organization") && (profile.isVerified ?? false)
             let searchArea = CityDirectory.searchArea(for: country)
             let cityCoordinate = try await geocodingAPI.geocodeCity(city: city, country: country, area: searchArea)
                 ?? searchArea.center
@@ -290,7 +293,8 @@ final class EventViewModel: ObservableObject {
                 longitude: selectedCoordinate.longitude,
                 startsAt: iso8601String(from: combine(day: startDate, time: startTime)),
                 endsAt: endTimestamp,
-                volunteersNeeded: volunteersNeeded
+                volunteersNeeded: volunteersNeeded,
+                ratingPoints: isVerifiedOrganization ? ratingPoints : nil
             )
 
             let response = try await session.performAuthorizedRequest { token in

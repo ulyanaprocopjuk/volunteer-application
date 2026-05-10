@@ -957,7 +957,7 @@ class TelegramAdminBot:
 
     def _verify_organization(self, arg: str) -> str:
         if not arg:
-            return "Укажите ID профиля: /verifyOrg [id]"
+            return "Укажите ID профиля: /verify_org [id]"
 
         try:
             profile_id = int(arg)

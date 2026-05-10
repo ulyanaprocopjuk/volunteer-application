@@ -14,6 +14,7 @@ struct CreateEventRequest: Encodable {
     let startsAt: String
     let endsAt: String?
     let volunteersNeeded: Int
+    let ratingPoints: Int?
 }
 
 struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
@@ -40,6 +41,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     let presentCount: Int?
     let groupCount: Int?
     let isOrganizerVerified: Bool?
+    let ratingPoints: Int?
 
     init(
         id: String,
@@ -64,7 +66,8 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         createdAt: String?,
         presentCount: Int? = nil,
         groupCount: Int? = nil,
-        isOrganizerVerified: Bool? = nil
+        isOrganizerVerified: Bool? = nil,
+        ratingPoints: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -89,6 +92,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         self.presentCount = presentCount
         self.groupCount = groupCount
         self.isOrganizerVerified = isOrganizerVerified
+        self.ratingPoints = ratingPoints
     }
 
     enum CodingKeys: String, CodingKey {
@@ -115,6 +119,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         case presentCount = "present_count"
         case groupCount = "group_count"
         case isOrganizerVerified = "is_organizer_verified"
+        case ratingPoints = "rating_points"
     }
 }
 

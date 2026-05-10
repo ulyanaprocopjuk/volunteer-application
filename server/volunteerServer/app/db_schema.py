@@ -132,6 +132,8 @@ def ensure_database_schema(engine: Engine) -> None:
         statements.append("ALTER TABLE events ADD COLUMN present_count INTEGER NULL")
     if "group_count" not in columns:
         statements.append("ALTER TABLE events ADD COLUMN group_count INTEGER NULL")
+    if "rating_points" not in columns:
+        statements.append("ALTER TABLE events ADD COLUMN rating_points INTEGER NOT NULL DEFAULT 50")
 
     if not statements:
         return

@@ -13,6 +13,7 @@ struct EventFormView: View {
     @State private var activePicker: ActivePicker?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showDirectionDropdown = false
+    @State private var showRatingPointsPicker = false
 
     @State private var draftStartDate = Date()
     @State private var draftStartTime = Date()
@@ -80,6 +81,10 @@ struct EventFormView: View {
                             text: $viewModel.eventDescription,
                             placeholder: "Введите описание события"
                         )
+
+                        if viewModel.isVerifiedOrganization {
+                            ratingPointsRow
+                        }
 
                         EventPickerField(
                             title: "Местоположение",
@@ -347,6 +352,40 @@ struct EventFormView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: showDirectionDropdown)
+        .sheet(isPresented: $showRatingPointsPicker) {
+            RatingPointsPickerSheet(selectedPoints: $viewModel.ratingPoints)
+        }
+    }
+
+    private var ratingPointsRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            EventFieldTitle(title: "Очки за участие")
+
+            Button {
+                showRatingPointsPicker = true
+            } label: {
+                HStack {
+                    Text("Укажите количество очков за участие в этом событии")
+                        .font(.system(size: 14))
+                        .foregroundColor(.black.opacity(0.62))
+                        .multilineTextAlignment(.leading)
+
+                    Spacer()
+
+                    Text("\(viewModel.ratingPoints)")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+                        .frame(minWidth: 36)
+                }
+                .padding(.horizontal, 18)
+                .frame(minHeight: 58)
+                .overlay(
+                    Capsule()
+                        .stroke(Color.gray.opacity(0.45), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     @MainActor
@@ -1072,6 +1111,54 @@ private struct EventLocationPickerSheet: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.gray.opacity(0.18), lineWidth: 1)
         )
+    }
+}
+
+private struct RatingPointsPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedPoints: Int
+
+    private let options = Array(stride(from: 50, through: 100, by: 5))
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color.gray.opacity(0.4))
+                .frame(width: 36, height: 5)
+                .padding(.top, 10)
+
+            Text("Очки за участие")
+                .font(.system(size: 17, weight: .semibold))
+                .padding(.top, 16)
+
+            Picker("", selection: $selectedPoints) {
+                ForEach(options, id: \.self) { value in
+                    Text("\(value)").tag(value)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: 160)
+            .padding(.horizontal, 24)
+
+            Button {
+                dismiss()
+            } label: {
+                Text("Готово")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    )
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+            .padding(.top, 8)
+        }
+        .presentationDetents([.height(300)])
+        .presentationDragIndicator(.hidden)
     }
 }
 

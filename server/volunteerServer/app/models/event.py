@@ -37,6 +37,7 @@ class Event(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     volunteers_needed: Mapped[int] = mapped_column(Integer, nullable=False)
+    rating_points: Mapped[int] = mapped_column(Integer, nullable=False, default=50, server_default="50")
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
     present_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     group_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

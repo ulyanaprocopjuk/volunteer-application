@@ -4,12 +4,15 @@ struct EventSummaryCard: View {
     let event: EventResponse
     var showFullDescription: Bool = false
 
+    @State private var showRatingPointsTooltip = false
+
     private var moderationStatus: EventModerationStatus {
         EventModerationStatus(rawValue: event.status)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topTrailing) {
             HStack(alignment: .top, spacing: 14) {
                 eventThumbnail
 
@@ -33,6 +36,11 @@ struct EventSummaryCard: View {
                 }
             }
 
+            if let points = event.ratingPoints {
+                ratingBadge(points: points)
+            }
+            } // ZStack
+
             if !directionText.isEmpty {
                 HStack(spacing: 8) {
                     Text("Направление:")
@@ -46,13 +54,22 @@ struct EventSummaryCard: View {
                 .padding(.top, 18)
             }
 
-            if !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(event.description)
-                    .font(.system(size: 17, weight: .regular, design: .serif))
-                    .foregroundColor(.black.opacity(0.62))
-                    .lineSpacing(7)
-                    .lineLimit(showFullDescription ? nil : 3)
-                    .padding(.top, 20)
+            if !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || event.ratingPoints != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    if !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(event.description)
+                            .font(.system(size: 17, weight: .regular, design: .serif))
+                            .foregroundColor(.black.opacity(0.62))
+                            .lineSpacing(7)
+                            .lineLimit(showFullDescription ? nil : 3)
+                    }
+                    if let points = event.ratingPoints {
+                        Text("Количество очков за участие в этом событии: 50")
+                            .font(.system(size: 14, weight: .regular, design: .serif))
+                            .foregroundColor(.black.opacity(0.50))
+                    }
+                }
+                .padding(.top, 20)
             }
 
             VStack(alignment: .leading, spacing: 14) {
@@ -83,6 +100,37 @@ struct EventSummaryCard: View {
         }
         .padding(20)
         .background(Color.white)
+    }
+
+    private func ratingBadge(points: Int) -> some View {
+        ZStack(alignment: .trailing) {
+            if showRatingPointsTooltip {
+                Text("+20% к рейтингу")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color(red: 44/255, green: 67/255, blue: 102/255)))
+                    .padding(.trailing, 34)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
+            }
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showRatingPointsTooltip.toggle()
+                }
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 255/255, green: 214/255, blue: 0/255))
+                        .frame(width: 28, height: 28)
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func infoRow(icon: String, text: String) -> some View {

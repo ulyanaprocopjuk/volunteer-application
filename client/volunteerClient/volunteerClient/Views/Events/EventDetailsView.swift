@@ -19,6 +19,7 @@ struct EventDetailsView: View {
     @State private var cancelEventReason = ""
     @State private var showsFinishAlert = false
     @State private var showsRatingView = false
+    @State private var showRatingPointsTooltip = false
 
     private let eventImageSize: CGFloat = 56
 
@@ -255,19 +256,33 @@ struct EventDetailsView: View {
 
     private var eventCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            topBlock
+            ZStack(alignment: .topTrailing) {
+                topBlock
+                if let points = event.ratingPoints {
+                    ratingBadge(points: points)
+                }
+            }
 
             if !displayDirection.isEmpty {
                 directionRow
                     .padding(.top, 18)
             }
 
-            if !displayDescription.isEmpty {
-                Text(displayDescription)
-                    .font(.system(size: 13, weight: .regular, design: .serif))
-                    .foregroundColor(.black.opacity(0.62))
-                    .lineSpacing(8)
-                    .padding(.top, displayDirection.isEmpty ? 26 : 18)
+            if !displayDescription.isEmpty || event.ratingPoints != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    if !displayDescription.isEmpty {
+                        Text(displayDescription)
+                            .font(.system(size: 13, weight: .regular, design: .serif))
+                            .foregroundColor(.black.opacity(0.62))
+                            .lineSpacing(8)
+                    }
+                    if let points = event.ratingPoints {
+                        Text("Количество очков за участие в этом событии: 50")
+                            .font(.system(size: 13, weight: .regular, design: .serif))
+                            .foregroundColor(.black.opacity(0.50))
+                    }
+                }
+                .padding(.top, displayDirection.isEmpty ? 26 : 18)
             }
 
             infoBlock
@@ -329,6 +344,42 @@ struct EventDetailsView: View {
         }
         .frame(width: eventImageSize, height: eventImageSize)
         .clipShape(Circle())
+    }
+
+    private func ratingBadge(points: Int) -> some View {
+        ZStack(alignment: .trailing) {
+            if showRatingPointsTooltip {
+                Text("+20% к рейтингу")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    )
+                    .padding(.trailing, 34)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
+            }
+
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showRatingPointsTooltip.toggle()
+                }
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 255/255, green: 214/255, blue: 0/255))
+                        .frame(width: 28, height: 28)
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private var placeholderPhoto: some View {
