@@ -90,6 +90,12 @@ def ensure_database_schema(engine: Engine) -> None:
                 connection.execute(text(
                     "ALTER TABLE profiles ADD COLUMN rating INTEGER NOT NULL DEFAULT 100"
                 ))
+        if "is_verified" not in profile_columns:
+            bool_type = "BOOLEAN" if engine.dialect.name == "postgresql" else "INTEGER"
+            with engine.begin() as connection:
+                connection.execute(text(
+                    f"ALTER TABLE profiles ADD COLUMN is_verified {bool_type} NOT NULL DEFAULT FALSE"
+                ))
 
     if "events" not in table_names:
         return

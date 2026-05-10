@@ -1244,7 +1244,14 @@ class EventService:
         response.accepted_count = self._accepted_count(db, event.id)
         response.is_creator = user is not None and event.creator_id == user.id
         response.user_application_status = self._user_application_status(db, event.id, user)
+        response.is_organizer_verified = self._organizer_is_verified(event.creator)
         return response
+
+    @staticmethod
+    def _organizer_is_verified(user: User | None) -> bool:
+        if user is None or user.profile is None:
+            return False
+        return bool(user.profile.is_verified)
 
     def _review_application(
         self,

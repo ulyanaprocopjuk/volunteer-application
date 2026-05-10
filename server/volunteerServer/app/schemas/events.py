@@ -68,6 +68,7 @@ class EventResponse(BaseModel):
     created_at: datetime | None = Field(default=None, alias="created_at")
     present_count: int | None = Field(default=None)
     group_count: int | None = Field(default=None)
+    is_organizer_verified: bool = Field(default=False)
 
     @field_validator("status")
     @classmethod

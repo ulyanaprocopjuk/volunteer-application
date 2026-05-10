@@ -145,11 +145,19 @@ struct EventSummaryCard: View {
                 .font(.system(size: 12, weight: .regular, design: .serif))
                 .foregroundColor(.black.opacity(0.48))
 
-            Text(organizerText)
-                .font(.system(size: 15, weight: .semibold, design: .serif))
-                .foregroundColor(.black.opacity(0.62))
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 4) {
+                Text(organizerText)
+                    .font(.system(size: 15, weight: .semibold, design: .serif))
+                    .foregroundColor(.black.opacity(0.62))
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if event.isOrganizerVerified == true {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

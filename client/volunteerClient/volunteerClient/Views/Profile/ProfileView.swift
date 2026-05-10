@@ -111,15 +111,34 @@ struct ProfileView: View {
     }
 
     private var avatarSection: some View {
+        ZStack(alignment: .bottomTrailing) {
+            ZStack {
+                Circle()
+                    .fill(Color(red: 231/255, green: 243/255, blue: 247/255))
+                    .frame(width: 104, height: 104)
+
+                avatarContent
+            }
+            .frame(width: 104, height: 104)
+            .clipShape(Circle())
+
+            if !model.isVolunteer && model.isVerified {
+                verifiedBadge
+            }
+        }
+    }
+
+    private var verifiedBadge: some View {
         ZStack {
             Circle()
-                .fill(Color(red: 231/255, green: 243/255, blue: 247/255))
-                .frame(width: 104, height: 104)
+                .fill(Color.white)
+                .frame(width: 26, height: 26)
 
-            avatarContent
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 22))
+                .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
         }
-        .frame(width: 104, height: 104)
-        .clipShape(Circle())
+        .offset(x: 4, y: 4)
     }
 
     @ViewBuilder

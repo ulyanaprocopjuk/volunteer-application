@@ -23,7 +23,7 @@ from app.config import (
     TELEGRAM_POLL_INTERVAL_SECONDS,
 )
 from app.db import SessionLocal
-from app.models import Event, EventAdminMessage, User
+from app.models import Event, EventAdminMessage, Profile, ProfileType, User
 from app.services.location_display import build_location_display
 from app.services.notification_service import notification_service
 
@@ -518,6 +518,12 @@ class TelegramAdminBot:
 
         if text == "/time":
             response_text = f"Текущее время: {time_text}"
+        elif text.startswith("/listOrg"):
+            search_query = text[len("/listOrg"):].strip()
+            response_text = self._list_organizations(search_query)
+        elif text.startswith("/verifyOrg"):
+            arg = text[len("/verifyOrg"):].strip()
+            response_text = self._verify_organization(arg)
         else:
             response_text = "Неизвестная команда."
 
@@ -731,6 +737,63 @@ class TelegramAdminBot:
             "completed": "Завершено",
         }
         return statuses.get(status or "", status or "")
+
+    def _list_organizations(self, search_query: str) -> str:
+        db = SessionLocal()
+        try:
+            query = select(Profile).where(Profile.type == ProfileType.organization)
+            if search_query:
+                query = query.where(
+                    Profile.organization_name.ilike(f"%{search_query}%")
+                )
+            query = query.order_by(Profile.organization_name)
+            orgs = db.scalars(query).all()
+
+            if not orgs:
+                hint = f" по запросу «{search_query}»" if search_query else ""
+                return f"Организации{hint} не найдены."
+
+            lines = ["<b>Список организаций:</b>\n"]
+            for org in orgs:
+                name = html.escape(org.organization_name or "—")
+                verified = " ✅" if org.is_verified else ""
+                lines.append(f"• {name}{verified} — ID: <code>{org.id}</code>")
+
+            return "\n".join(lines)
+        except Exception:
+            logger.exception("Failed to list organizations")
+            return "Ошибка при получении списка организаций."
+        finally:
+            db.close()
+
+    def _verify_organization(self, arg: str) -> str:
+        if not arg:
+            return "Укажите ID профиля: /verifyOrg [id]"
+
+        try:
+            profile_id = int(arg)
+        except ValueError:
+            return f"Некорректный ID: {html.escape(arg)}"
+
+        db = SessionLocal()
+        try:
+            profile = db.get(Profile, profile_id)
+            if profile is None:
+                return f"Профиль с ID {profile_id} не найден."
+            if profile.type != ProfileType.organization:
+                return f"Профиль с ID {profile_id} не является организацией."
+
+            profile.is_verified = True
+            db.commit()
+
+            name = html.escape(profile.organization_name or "—")
+            return f"✅ Организация <b>{name}</b> (ID: {profile_id}) подтверждена."
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to verify organization %s", arg)
+            return "Ошибка при подтверждении организации."
+        finally:
+            db.close()
 
     @classmethod
     def _event_text(cls, event: Event, creator: User) -> str:

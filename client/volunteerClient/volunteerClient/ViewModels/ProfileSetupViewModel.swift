@@ -92,6 +92,7 @@ final class ProfileSetupViewModel: ObservableObject {
     @Published var aboutOrganization = ""
 
     @Published var rating: Int = 100
+    @Published var isVerified: Bool = false
 
     @Published var isLoading = false
     @Published var isProfileLoading = false
@@ -436,6 +437,7 @@ final class ProfileSetupViewModel: ObservableObject {
         avatarData = nil
         avatarURL = profile.avatarURL
         rating = profile.rating ?? 100
+        isVerified = profile.isVerified ?? false
 
         let phone = profile.phone ?? ""
         let email = profile.email ?? ""

@@ -83,3 +83,4 @@ class ProfileResponse(BaseModel):
     skills: list[str]
     about: str | None
     rating: int
+    is_verified: bool = False

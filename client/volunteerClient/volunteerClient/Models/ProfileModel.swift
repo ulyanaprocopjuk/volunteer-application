@@ -23,6 +23,7 @@ struct ProfileResponse: Decodable, Identifiable, Hashable {
     let skills: [String]?
     let about: String?
     let rating: Int?
+    let isVerified: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, type, phone, email, city, country, skills, about, rating
@@ -31,6 +32,7 @@ struct ProfileResponse: Decodable, Identifiable, Hashable {
         case firstName = "first_name"
         case lastName = "last_name"
         case organizationName = "organization_name"
+        case isVerified = "is_verified"
     }
 }
 

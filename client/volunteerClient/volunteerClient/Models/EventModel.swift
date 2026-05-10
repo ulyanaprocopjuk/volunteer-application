@@ -39,6 +39,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
     let createdAt: String?
     let presentCount: Int?
     let groupCount: Int?
+    let isOrganizerVerified: Bool?
 
     init(
         id: String,
@@ -62,7 +63,8 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         organizerName: String?,
         createdAt: String?,
         presentCount: Int? = nil,
-        groupCount: Int? = nil
+        groupCount: Int? = nil,
+        isOrganizerVerified: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -86,6 +88,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.presentCount = presentCount
         self.groupCount = groupCount
+        self.isOrganizerVerified = isOrganizerVerified
     }
 
     enum CodingKeys: String, CodingKey {
@@ -111,6 +114,7 @@ struct EventResponse: Decodable, Identifiable, Hashable, Sendable {
         case createdAt = "created_at"
         case presentCount = "present_count"
         case groupCount = "group_count"
+        case isOrganizerVerified = "is_organizer_verified"
     }
 }
 
