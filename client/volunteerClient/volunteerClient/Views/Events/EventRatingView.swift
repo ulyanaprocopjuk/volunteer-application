@@ -1,19 +1,146 @@
 import SwiftUI
 
+// MARK: - Custom flat face shapes
+
+private struct SadFaceShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let cx = rect.midX
+        let cy = rect.midY
+        let r = min(rect.width, rect.height) / 2
+
+        // left eye
+        p.addEllipse(in: CGRect(x: cx - r * 0.35 - r * 0.08, y: cy - r * 0.28, width: r * 0.16, height: r * 0.18))
+        // right eye
+        p.addEllipse(in: CGRect(x: cx + r * 0.35 - r * 0.08, y: cy - r * 0.28, width: r * 0.16, height: r * 0.18))
+        // mouth — frown
+        p.move(to: CGPoint(x: cx - r * 0.38, y: cy + r * 0.38))
+        p.addQuadCurve(
+            to: CGPoint(x: cx + r * 0.38, y: cy + r * 0.38),
+            control: CGPoint(x: cx, y: cy + r * 0.12)
+        )
+        return p
+    }
+}
+
+private struct NeutralFaceShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let cx = rect.midX
+        let cy = rect.midY
+        let r = min(rect.width, rect.height) / 2
+
+        // left eye
+        p.addEllipse(in: CGRect(x: cx - r * 0.35 - r * 0.08, y: cy - r * 0.28, width: r * 0.16, height: r * 0.18))
+        // right eye
+        p.addEllipse(in: CGRect(x: cx + r * 0.35 - r * 0.08, y: cy - r * 0.28, width: r * 0.16, height: r * 0.18))
+        // mouth — flat line
+        p.move(to: CGPoint(x: cx - r * 0.38, y: cy + r * 0.28))
+        p.addLine(to: CGPoint(x: cx + r * 0.38, y: cy + r * 0.28))
+        return p
+    }
+}
+
+private struct HappyFaceShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let cx = rect.midX
+        let cy = rect.midY
+        let r = min(rect.width, rect.height) / 2
+
+        // left eye
+        p.addEllipse(in: CGRect(x: cx - r * 0.35 - r * 0.08, y: cy - r * 0.30, width: r * 0.16, height: r * 0.18))
+        // right eye
+        p.addEllipse(in: CGRect(x: cx + r * 0.35 - r * 0.08, y: cy - r * 0.30, width: r * 0.16, height: r * 0.18))
+        // mouth — smile
+        p.move(to: CGPoint(x: cx - r * 0.38, y: cy + r * 0.14))
+        p.addQuadCurve(
+            to: CGPoint(x: cx + r * 0.38, y: cy + r * 0.14),
+            control: CGPoint(x: cx, y: cy + r * 0.52)
+        )
+        return p
+    }
+}
+
+private struct FaceButton: View {
+    enum Mood { case sad, neutral, happy }
+
+    let mood: Mood
+    let isSelected: Bool
+    let activeColor: Color
+    let size: CGFloat
+    let action: () -> Void
+
+    private var strokeWidth: CGFloat { size * 0.072 }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(isSelected ? activeColor.opacity(0.12) : Color(.systemGray5))
+                    .frame(width: size, height: size)
+                    .overlay(
+                        Circle()
+                            .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: isSelected ? 2 : 1.5)
+                    )
+
+                // face outline circle
+                Circle()
+                    .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth)
+                    .frame(width: size * 0.62, height: size * 0.62)
+
+                // face details
+                Group {
+                    switch mood {
+                    case .sad:
+                        SadFaceShape()
+                            .fill(isSelected ? activeColor : Color(.systemGray3))
+                            .frame(width: size * 0.62, height: size * 0.62)
+                        SadFaceShape()
+                            .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth * 0.8)
+                            .frame(width: size * 0.62, height: size * 0.62)
+                    case .neutral:
+                        NeutralFaceShape()
+                            .fill(isSelected ? activeColor : Color(.systemGray3))
+                            .frame(width: size * 0.62, height: size * 0.62)
+                        NeutralFaceShape()
+                            .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth * 0.8)
+                            .frame(width: size * 0.62, height: size * 0.62)
+                    case .happy:
+                        HappyFaceShape()
+                            .fill(isSelected ? activeColor : Color(.systemGray3))
+                            .frame(width: size * 0.62, height: size * 0.62)
+                        HappyFaceShape()
+                            .stroke(isSelected ? activeColor : Color(.systemGray3), lineWidth: strokeWidth * 0.8)
+                            .frame(width: size * 0.62, height: size * 0.62)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
+    }
+}
+
+// MARK: - Main View
+
 struct EventRatingView: View {
     let eventID: String
     let session: AppSession
     let api: EventAPIProtocol
+    let isOrganizerVerified: Bool
+    let eventRatingPoints: Int
     var onCompleted: ((EventResponse?) -> Void)?
 
     @State private var profiles: [RatableProfile] = []
-    @State private var scores: [Int: Int] = [:]
+    // nil = nothing selected; Int = chosen score
+    @State private var selectedScores: [Int: Int?] = [:]
     @State private var isLoading = true
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
     private let navy = Color(red: 44/255, green: 67/255, blue: 102/255)
-    private let scoreOptions = stride(from: -50, through: 50, by: 10).map { $0 }
+    private let faceSize: CGFloat = 54
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,16 +205,14 @@ struct EventRatingView: View {
     }
 
     private var header: some View {
-        ZStack {
-            Text("Оцените участников")
-                .font(.system(size: 17, weight: .semibold, design: .serif))
-                .foregroundColor(navy)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        .padding(.bottom, 16)
-        .background(Color.white)
+        Text("Оцените участников")
+            .font(.system(size: 17, weight: .semibold, design: .serif))
+            .foregroundColor(navy)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+            .background(Color.white)
     }
 
     private var submitButton: some View {
@@ -113,9 +238,7 @@ struct EventRatingView: View {
     }
 
     private func ratingRow(profile: RatableProfile) -> some View {
-        let score = scores[profile.profileID] ?? 0
-
-        return VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 AsyncImage(url: profile.avatarURL.flatMap { URL(string: $0) }) { image in
                     image.resizable().scaledToFill()
@@ -137,14 +260,9 @@ struct EventRatingView: View {
                         .foregroundColor(.gray)
                 }
                 Spacer()
-
-                Text(score > 0 ? "+\(score)" : "\(score)")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(scoreColor(score))
-                    .frame(minWidth: 44, alignment: .trailing)
             }
 
-            scorePicker(for: profile.profileID, current: score)
+            facePicker(for: profile.profileID)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -155,33 +273,49 @@ struct EventRatingView: View {
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 3)
     }
 
-    private func scorePicker(for profileID: Int, current: Int) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(scoreOptions, id: \.self) { value in
-                    Button {
-                        scores[profileID] = value
-                    } label: {
-                        Text(value > 0 ? "+\(value)" : "\(value)")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(current == value ? .white : scoreColor(value))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                    .fill(current == value ? scoreColor(value) : scoreColor(value).opacity(0.12))
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
+    private func facePicker(for profileID: Int) -> some View {
+        let current: Int?? = selectedScores[profileID]
+        let currentScore: Int? = current ?? nil
+
+        return HStack(spacing: 10) {
+            FaceButton(mood: .sad, isSelected: currentScore == -50, activeColor: Color(red: 0.85, green: 0.2, blue: 0.2), size: faceSize) {
+                selectedScores[profileID] = currentScore == -50 ? nil : -50
+            }
+            FaceButton(mood: .neutral, isSelected: currentScore == 0, activeColor: Color(red: 0.9, green: 0.72, blue: 0.1), size: faceSize) {
+                selectedScores[profileID] = currentScore == 0 ? nil : 0
+            }
+            FaceButton(mood: .happy, isSelected: currentScore == 50, activeColor: Color(red: 0.2, green: 0.72, blue: 0.4), size: faceSize) {
+                selectedScores[profileID] = currentScore == 50 ? nil : 50
+            }
+
+            if isOrganizerVerified {
+                Spacer()
+                starButton(profileID: profileID, currentScore: currentScore)
             }
         }
     }
 
-    private func scoreColor(_ value: Int) -> Color {
-        if value > 0 { return Color(red: 0.2, green: 0.7, blue: 0.4) }
-        if value < 0 { return Color(red: 0.85, green: 0.2, blue: 0.2) }
-        return .gray
+    private func starButton(profileID: Int, currentScore: Int?) -> some View {
+        let isSelected = currentScore == eventRatingPoints
+        let yellow = Color(red: 255/255, green: 214/255, blue: 0/255)
+        return Button {
+            selectedScores[profileID] = isSelected ? nil : eventRatingPoints
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(isSelected ? yellow.opacity(0.18) : Color(.systemGray5))
+                    .frame(width: faceSize, height: faceSize)
+                    .overlay(
+                        Circle()
+                            .stroke(isSelected ? yellow : Color(.systemGray3), lineWidth: isSelected ? 2 : 1.5)
+                    )
+                Image(systemName: "star.fill")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(isSelected ? yellow : Color(.systemGray3))
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isSelected)
     }
 
     private func loadProfiles() async {
@@ -193,7 +327,7 @@ struct EventRatingView: View {
             }
             profiles = fetched
             for p in profiles {
-                scores[p.profileID] = 0
+                selectedScores[p.profileID] = nil
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -204,7 +338,10 @@ struct EventRatingView: View {
         isSubmitting = true
         defer { isSubmitting = false }
         do {
-            let items = profiles.map { RatingItem(profileID: $0.profileID, score: scores[$0.profileID] ?? 0) }
+            let items = profiles.map { profile -> RatingItem in
+                let score: Int = selectedScores[profile.profileID] ?? 0
+                return RatingItem(profileID: profile.profileID, score: score)
+            }
             let updated = try await session.performAuthorizedRequest { token in
                 try await api.submitRatings(eventID: eventID, ratings: items, token: token)
             }
@@ -214,4 +351,3 @@ struct EventRatingView: View {
         }
     }
 }
-

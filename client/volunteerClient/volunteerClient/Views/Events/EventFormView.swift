@@ -361,30 +361,29 @@ struct EventFormView: View {
         VStack(alignment: .leading, spacing: 8) {
             EventFieldTitle(title: "Очки за участие")
 
-            Button {
-                showRatingPointsPicker = true
-            } label: {
-                HStack {
-                    Text("Укажите количество очков за участие в этом событии")
-                        .font(.system(size: 14))
-                        .foregroundColor(.black.opacity(0.62))
-                        .multilineTextAlignment(.leading)
+            HStack {
+                Text("Укажите количество очков за участие")
+                    .font(.system(size: 14))
+                    .foregroundColor(.black.opacity(0.62))
 
-                    Spacer()
+                Spacer()
 
+                Button {
+                    showRatingPointsPicker = true
+                } label: {
                     Text("\(viewModel.ratingPoints)")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
                         .frame(minWidth: 36)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(red: 18/255, green: 162/255, blue: 231/255).opacity(0.5), lineWidth: 1)
+                        )
                 }
-                .padding(.horizontal, 18)
-                .frame(minHeight: 58)
-                .overlay(
-                    Capsule()
-                        .stroke(Color.gray.opacity(0.45), lineWidth: 1)
-                )
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -1137,7 +1136,7 @@ private struct RatingPointsPickerSheet: View {
                 }
             }
             .pickerStyle(.wheel)
-            .frame(height: 160)
+            .frame(height: 110)
             .padding(.horizontal, 24)
 
             Button {
@@ -1157,7 +1156,7 @@ private struct RatingPointsPickerSheet: View {
             .padding(.bottom, 32)
             .padding(.top, 8)
         }
-        .presentationDetents([.height(300)])
+        .presentationDetents([.height(220)])
         .presentationDragIndicator(.hidden)
     }
 }

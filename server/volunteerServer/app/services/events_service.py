@@ -1189,8 +1189,8 @@ class EventService:
         is_organizer = event.creator_id == user.id
 
         for item in ratings:
-            if item.score % 10 != 0 or not (-50 <= item.score <= 50):
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Score must be a multiple of 10 between -50 and 50")
+            if not (-50 <= item.score <= 200):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Score out of allowed range")
             rated_profile = db.get(Profile, item.profile_id)
             if rated_profile is None:
                 continue

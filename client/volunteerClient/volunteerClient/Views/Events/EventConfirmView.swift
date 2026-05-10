@@ -6,6 +6,7 @@ struct EventConfirmView: View {
     let onConfirmed: ((EventResponse) -> Void)?
 
     @State private var createdAt = Date()
+    @State private var showRatingPointsTooltip = false
 
     private let eventImageSize: CGFloat = 56
 
@@ -136,9 +137,42 @@ struct EventConfirmView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 0)
+            if viewModel.isVerifiedOrganization {
+                ratingBadge
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var ratingBadge: some View {
+        ZStack(alignment: .trailing) {
+            if showRatingPointsTooltip {
+                Text("+20% к рейтингу")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color(red: 44/255, green: 67/255, blue: 102/255)))
+                    .padding(.trailing, 34)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
+            }
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showRatingPointsTooltip.toggle()
+                }
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 255/255, green: 214/255, blue: 0/255))
+                        .frame(width: 28, height: 28)
+                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private var infoBlock: some View {

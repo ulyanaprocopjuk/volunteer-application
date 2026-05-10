@@ -712,10 +712,17 @@ private struct EventFeedSummaryCard: View {
                     .lineLimit(2)
 
                 if !organizerText.isEmpty {
-                    Text(organizerText)
-                        .font(.system(size: 12, weight: .semibold, design: .serif))
-                        .foregroundColor(.black.opacity(0.48))
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(organizerText)
+                            .font(.system(size: 12, weight: .semibold, design: .serif))
+                            .foregroundColor(.black.opacity(0.48))
+                            .lineLimit(1)
+                        if event.isOrganizerVerified == true {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(Color(red: 18/255, green: 162/255, blue: 231/255))
+                        }
+                    }
                 }
             }
 

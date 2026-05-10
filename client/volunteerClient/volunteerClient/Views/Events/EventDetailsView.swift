@@ -156,6 +156,8 @@ struct EventDetailsView: View {
                     eventID: event.id,
                     session: session,
                     api: api,
+                    isOrganizerVerified: currentEvent.isOrganizerVerified ?? false,
+                    eventRatingPoints: currentEvent.ratingPoints ?? 50,
                     onCompleted: { updatedEvent in
                         showsRatingView = false
                         if let updatedEvent {
