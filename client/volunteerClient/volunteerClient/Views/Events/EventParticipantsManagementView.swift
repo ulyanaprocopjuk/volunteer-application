@@ -921,7 +921,9 @@ struct EventAttendanceConfirmationView: View {
                 try await api.fetchAttendance(eventID: eventID, token: token)
             }
             attendanceItems = items
-            presentIDs = Set(items.filter { $0.isPresent }.map { $0.applicationID })
+            let serverPresent = Set(items.filter { $0.isPresent }.map { $0.applicationID })
+            // If no one is marked present yet (fresh start), default to everyone present
+            presentIDs = serverPresent.isEmpty ? Set(items.map { $0.applicationID }) : serverPresent
         } catch {
             errorMessage = error.localizedDescription
         }

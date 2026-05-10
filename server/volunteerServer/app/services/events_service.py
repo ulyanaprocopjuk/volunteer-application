@@ -554,7 +554,7 @@ class EventService:
         present_count = len(present_set)
         event.present_count = present_count
 
-        if present_count >= 4:
+        if present_count >= 2:
             event.status = "grouping"
             event.group_count = None
             db.commit()
