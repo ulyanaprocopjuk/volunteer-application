@@ -154,10 +154,15 @@ struct EventDetailsView: View {
                 EventRatingView(
                     eventID: event.id,
                     session: session,
-                    api: api
-                ) { updatedEvent in
-                    currentEvent = updatedEvent
-                }
+                    api: api,
+                    onCompleted: { updatedEvent in
+                        showsRatingView = false
+                        if let updatedEvent {
+                            currentEvent = updatedEvent
+                        }
+                        dismiss()
+                    }
+                )
             }
         }
         .alert("Завершить событие?", isPresented: $showsFinishAlert) {
@@ -276,7 +281,10 @@ struct EventDetailsView: View {
                     .padding(.top, 22)
             }
 
-            if event.isCreator == true, (isAlmostStarting || isInAttendancePhase || isInGroupingPhase), session != nil {
+            if event.isCreator == true,
+               !isActivePhase,
+               (isAlmostStarting || isInAttendancePhase || isInGroupingPhase),
+               session != nil {
                 organizerStartRow
                     .padding(.top, 22)
             }
@@ -287,15 +295,11 @@ struct EventDetailsView: View {
             }
 
             if isActivePhase, session != nil,
-               event.isCreator == true || event.userApplicationStatus == "accepted" {
+               event.userApplicationStatus == "accepted" {
                 chatButton
                     .padding(.top, 22)
             }
 
-            if isInRatingPhase, session != nil {
-                ratingButton
-                    .padding(.top, 22)
-            }
         }
     }
 
@@ -745,6 +749,17 @@ struct EventDetailsView: View {
             currentEvent = try await session.performAuthorizedRequest { token in
                 try await api.fetchEvent(id: currentEvent.id, token: token)
             }
+            // Auto-open rating screen for group leaders (only if they have someone to rate)
+            if isInRatingPhase,
+               currentEvent.isCreator != true,
+               currentEvent.userApplicationStatus == "accepted" {
+                let ratableProfiles = try await session.performAuthorizedRequest { token in
+                    try await api.fetchRatableProfiles(eventID: currentEvent.id, token: token)
+                }
+                if !ratableProfiles.isEmpty {
+                    showsRatingView = true
+                }
+            }
         } catch {
             return
         }
@@ -842,7 +857,7 @@ struct EventDetailsView: View {
                 try await api.finishEvent(id: currentEvent.id, token: token)
             }
             currentEvent = updatedEvent
-            showMessage(updatedEvent.message ?? "Событие завершено")
+            showsRatingView = true
         } catch {
             errorMessage = error.localizedDescription
         }

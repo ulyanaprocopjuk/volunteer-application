@@ -1103,17 +1103,26 @@ class EventService:
         profile = self._profile_for_user(db, user)
         is_organizer = event.creator_id == user.id
 
+        groups = self._get_event_groups(db, event_id)
+        has_groups = len(groups) > 0
+
         if is_organizer:
-            # Organizer rates all accepted participants
-            applications = db.scalars(
-                select(EventApplication).where(
-                    EventApplication.event_id == event_id,
-                    EventApplication.status == EventApplicationStatus.accepted,
-                )
-            ).all()
-            profiles = [a.volunteer for a in applications if a.volunteer.id != profile.id]
+            if has_groups:
+                # Organizer rates only group leaders
+                leader_ids = {g.leader_id for g in groups if g.leader_id is not None}
+                profiles = [db.get(Profile, lid) for lid in leader_ids]
+                profiles = [p for p in profiles if p is not None and p.id != profile.id]
+            else:
+                # No groups — organizer rates all accepted participants
+                applications = db.scalars(
+                    select(EventApplication).where(
+                        EventApplication.event_id == event_id,
+                        EventApplication.status == EventApplicationStatus.accepted,
+                    )
+                ).all()
+                profiles = [a.volunteer for a in applications if a.volunteer.id != profile.id]
         else:
-            # Leader rates members of own group; member has no one to rate
+            # Leader rates members of own group; regular member has no one to rate
             group_member = db.scalar(
                 select(EventGroupMember).where(
                     EventGroupMember.profile_id == profile.id,
@@ -1126,7 +1135,7 @@ class EventService:
             group = db.get(EventGroup, group_member.group_id)
             if group is None or group.leader_id != profile.id:
                 return []
-            # Leader rates all non-leader members
+            # Leader rates all non-leader members of their group
             member_rows = db.scalars(
                 select(EventGroupMember).where(
                     EventGroupMember.group_id == group.id,

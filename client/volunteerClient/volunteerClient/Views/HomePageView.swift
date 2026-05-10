@@ -52,13 +52,13 @@ struct HomePageView: View {
             .ignoresSafeArea(.container, edges: .bottom)
             .ignoresSafeArea(.keyboard, edges: .bottom)
             .background(Color(.systemGray6).ignoresSafeArea())
-            .overlay(alignment: .bottom) {
+            .overlay(alignment: .top) {
                 if let event = activeEvent {
                     ActiveEventBanner(event: event) {
                         selectedActiveEvent = event
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 94)
+                    .padding(.top, 60)
                 }
             }
             .fullScreenCover(item: $selectedActiveEvent) { event in
@@ -183,20 +183,20 @@ private struct ActiveEventBanner: View {
                 ZStack {
                     Circle()
                         .fill(Color.green.opacity(0.2))
-                        .frame(width: 32, height: 32)
+                        .frame(width: 40, height: 40)
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 11, height: 11)
+                        .frame(width: 14, height: 14)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("Событие идёт сейчас")
-                        .font(.system(size: 11, weight: .regular))
+                        .font(.system(size: 12, weight: .regular))
                         .foregroundColor(.white.opacity(0.72))
 
                     let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
                     Text(title.isEmpty ? "Без названия" : title)
-                        .font(.system(size: 14, weight: .semibold, design: .serif))
+                        .font(.system(size: 16, weight: .semibold, design: .serif))
                         .foregroundColor(.white)
                         .lineLimit(1)
                 }
@@ -204,15 +204,15 @@ private struct ActiveEventBanner: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white.opacity(0.65))
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
-                    .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+                    .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 6)
             )
         }
         .buttonStyle(.plain)

@@ -1,12 +1,10 @@
 import SwiftUI
 
 struct EventRatingView: View {
-    @Environment(\.dismiss) private var dismiss
-
     let eventID: String
     let session: AppSession
     let api: EventAPIProtocol
-    var onCompleted: ((EventResponse) -> Void)?
+    var onCompleted: ((EventResponse?) -> Void)?
 
     @State private var profiles: [RatableProfile] = []
     @State private var scores: [Int: Int] = [:]
@@ -18,77 +16,100 @@ struct EventRatingView: View {
     private let scoreOptions = stride(from: -50, through: 50, by: 10).map { $0 }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if profiles.isEmpty {
+        VStack(spacing: 0) {
+            header
+
+            if isLoading {
+                Spacer()
+                ProgressView()
+                Spacer()
+            } else if profiles.isEmpty {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 52))
+                        .foregroundColor(navy)
+                    Text("Нет участников для оценки")
+                        .font(.system(size: 17, weight: .semibold, design: .serif))
+                        .foregroundColor(.black)
+                }
+                Spacer()
+            } else {
+                ScrollView(showsIndicators: false) {
                     VStack(spacing: 16) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 52))
-                            .foregroundColor(navy)
-                        Text("Оценки уже выставлены")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.black)
-                        Text("Нет участников для оценки")
-                            .font(.system(size: 14))
-                            .foregroundColor(.gray)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 16) {
-                            ForEach(profiles) { profile in
-                                ratingRow(profile: profile)
-                            }
+                        ForEach(profiles) { profile in
+                            ratingRow(profile: profile)
                         }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 24)
+                }
+
+                submitButton
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 32)
+                    .padding(.top, 8)
+            }
+        }
+        .background(Color(.systemGray6).ignoresSafeArea())
+        .overlay {
+            if let msg = errorMessage {
+                VStack {
+                    Spacer()
+                    Text(msg)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
                         .padding(.horizontal, 20)
-                        .padding(.vertical, 16)
-                    }
-                }
-            }
-            .navigationTitle("Оценить участников")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Закрыть") { dismiss() }
-                        .foregroundColor(navy)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    if !profiles.isEmpty {
-                        Button("Отправить") {
-                            Task { await submitRatings() }
-                        }
-                        .fontWeight(.semibold)
-                        .foregroundColor(navy)
-                        .disabled(isSubmitting)
-                    }
-                }
-            }
-            .overlay {
-                if let msg = errorMessage {
-                    VStack {
-                        Spacer()
-                        Text(msg)
-                            .font(.system(size: 14))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 12)
-                            .background(Color.red.opacity(0.85))
-                            .cornerRadius(12)
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 24)
-                            .onAppear {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                    errorMessage = nil
-                                }
+                        .padding(.vertical, 12)
+                        .background(Color.red.opacity(0.85))
+                        .cornerRadius(12)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 24)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                errorMessage = nil
                             }
-                    }
+                        }
                 }
             }
         }
         .task { await loadProfiles() }
+    }
+
+    private var header: some View {
+        ZStack {
+            Text("Оцените участников")
+                .font(.system(size: 17, weight: .semibold, design: .serif))
+                .foregroundColor(navy)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
+        .background(Color.white)
+    }
+
+    private var submitButton: some View {
+        Button {
+            Task { await submitRatings() }
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(navy)
+                if isSubmitting {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Отправить")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .disabled(isSubmitting)
     }
 
     private func ratingRow(profile: RatableProfile) -> some View {
@@ -119,7 +140,7 @@ struct EventRatingView: View {
 
                 Text(score > 0 ? "+\(score)" : "\(score)")
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(score > 0 ? Color(red: 0.2, green: 0.7, blue: 0.4) : score < 0 ? Color(red: 0.85, green: 0.2, blue: 0.2) : .gray)
+                    .foregroundColor(scoreColor(score))
                     .frame(minWidth: 44, alignment: .trailing)
             }
 
@@ -188,9 +209,9 @@ struct EventRatingView: View {
                 try await api.submitRatings(eventID: eventID, ratings: items, token: token)
             }
             onCompleted?(updated)
-            dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 }
+
