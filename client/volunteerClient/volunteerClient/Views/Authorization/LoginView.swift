@@ -38,7 +38,7 @@ struct LoginView: View {
             VStack(alignment: .leading) {
                 header
 
-                VStack(spacing: Constants.fieldsSpacing) {
+                VStack(alignment: .leading, spacing: 0) {
                     LoginTextField(
                         placeholder: "Имя пользователя",
                         text: $vm.username,
@@ -62,6 +62,15 @@ struct LoginView: View {
                     ) {
                         performLogin()
                     }
+                    .padding(.top, Constants.fieldsSpacing)
+
+                    if let errorMessage = vm.errorMessage {
+                        Text(errorMessage)
+                            .font(.custom("NotoSans-Medium", size: 14))
+                            .foregroundStyle(Color.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+                    }
                 }
                 .padding(.top, Constants.fieldsTopPadding)
 
@@ -73,14 +82,6 @@ struct LoginView: View {
 
                 loginButton
                     .padding(.top, Constants.buttonTopPadding)
-
-                if let errorMessage = vm.errorMessage {
-                    Text(errorMessage)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.red)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 10)
-                }
 
                 bottomSignupRow
                     .padding(.top, Constants.bottomButtonTopPadding)

@@ -2,7 +2,7 @@ import SwiftUI
 
 private enum Constants {
     static let horizontalPadding: CGFloat = 35
-    static let headerTopPadding: CGFloat = 130
+    static let headerTopPadding: CGFloat = 110
     static let fieldsTopPadding: CGFloat = 20
     static let buttonTopPadding: CGFloat = 20
     static let bottomButtonTopPadding: CGFloat = 12

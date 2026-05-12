@@ -48,7 +48,7 @@ final class LoginViewModel: ObservableObject {
             let auth = try await authAPI.login(username: cleanUsername, password: password)
             try await session.authorize(with: auth, destination: .main)
         } catch {
-            errorMessage = "Пароль или логин неправильно введён"
+            errorMessage = "Пароль или логин введен неверно"
         }
     }
 }
