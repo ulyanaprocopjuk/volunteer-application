@@ -997,7 +997,9 @@ struct EventDetailsView: View {
     }
 
     private var displayCreatedDate: String {
-        let date = createdDate ?? startDate
+        guard let date = createdDate else {
+            return "не указана"
+        }
         return Self.createdDateFormatter.string(from: date)
     }
 
@@ -1035,7 +1037,7 @@ struct EventDetailsView: View {
 
     private var createdDate: Date? {
         guard let value = event.createdAt else { return nil }
-        return Self.isoFormatter.date(from: value)
+        return Self.parseISODate(value)
     }
 
     private static let isoFormatter: ISO8601DateFormatter = {
@@ -1043,6 +1045,16 @@ struct EventDetailsView: View {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
+
+    private static let fractionalISOFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static func parseISODate(_ value: String) -> Date? {
+        fractionalISOFormatter.date(from: value) ?? isoFormatter.date(from: value)
+    }
 
     private static let createdDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

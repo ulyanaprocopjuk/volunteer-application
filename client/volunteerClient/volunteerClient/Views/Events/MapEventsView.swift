@@ -316,10 +316,6 @@ struct MapEventsView: View {
 
     private var emptyStateView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: "map")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundColor(Color(red: 44/255, green: 67/255, blue: 102/255))
-
             Text("Событий не найдено")
                 .font(.system(size: 20, weight: .semibold, design: .serif))
                 .foregroundColor(.black.opacity(0.80))

@@ -59,38 +59,39 @@ struct ProfileEditView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 24)
 
-                Button {
-                    Task {
-                        let success = await viewModel.saveProfileChanges(reloadAfterSave: true)
-                        if success {
-                            onSave()
-                        }
-                    }
-                } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
-
-                        if viewModel.isLoading {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Сохранить")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
-                }
-                .disabled(!viewModel.canSubmit || viewModel.isLoading)
-                .opacity((!viewModel.canSubmit || viewModel.isLoading) ? 0.55 : 1)
-                .padding(.horizontal, 24)
-                .padding(.top, 30)
-                .padding(.bottom, 24)
             }
-            .padding(.bottom, 18)
         }
         .background(Color(.systemGray6).ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button {
+                Task {
+                    let success = await viewModel.saveProfileChanges(reloadAfterSave: true)
+                    if success {
+                        onSave()
+                    }
+                }
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+
+                    if viewModel.isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Сохранить")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+            }
+            .disabled(!viewModel.canSubmit || viewModel.isLoading)
+            .opacity((!viewModel.canSubmit || viewModel.isLoading) ? 0.55 : 1)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Color(.systemGray6))
+        }
     }
 
     private var backButton: some View {
