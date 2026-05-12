@@ -192,32 +192,31 @@ struct EventFormView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 24)
 
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Button {
-                    proceedToConfirmation()
-                } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
+                    Button {
+                        proceedToConfirmation()
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(red: 44/255, green: 67/255, blue: 102/255))
 
-                        if viewModel.isSubmitting {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Далее")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
+                            if viewModel.isSubmitting {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("Далее")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
                         }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
+                    .disabled(!viewModel.canSubmit || viewModel.isSubmitting)
+                    .opacity((!viewModel.canSubmit || viewModel.isSubmitting) ? 0.55 : 1)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 30)
+                    .padding(.bottom, 24)
                 }
-                .disabled(!viewModel.canSubmit || viewModel.isSubmitting)
-                .opacity((!viewModel.canSubmit || viewModel.isSubmitting) ? 0.55 : 1)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(Color.white)
+                .padding(.bottom, 18)
             }
         }
         .navigationTitle("Новое событие")

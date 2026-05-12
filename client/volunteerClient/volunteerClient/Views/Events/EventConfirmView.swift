@@ -23,12 +23,12 @@ struct EventConfirmView: View {
                             .padding(.bottom, 24)
                     }
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    confirmButton
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.white)
-                }
+
+                confirmButton
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 5)
+                    .background(Color.white)
             }
             .background(Color.white.ignoresSafeArea())
 
