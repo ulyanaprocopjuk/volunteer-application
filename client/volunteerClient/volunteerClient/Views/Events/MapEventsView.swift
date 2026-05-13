@@ -969,7 +969,7 @@ private struct EventsMapView: UIViewRepresentable {
         mapView.setRegion(
             MKCoordinateRegion(
                 center: fallbackCoordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+                span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06)
             ),
             animated: false
         )
@@ -985,24 +985,28 @@ private struct EventsMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
-        let eventIDs = events.map(\.id)
+        let eventKeys = events.map { event in
+            "\(event.id):\(event.latitude):\(event.longitude)"
+        }
         let fallbackKey = "\(fallbackCoordinate.latitude),\(fallbackCoordinate.longitude)"
-        if context.coordinator.renderedEventIDs != eventIDs
+        if context.coordinator.renderedEventKeys != eventKeys
             || context.coordinator.renderedFallbackKey != fallbackKey {
-            context.coordinator.renderedEventIDs = eventIDs
+            context.coordinator.renderedEventKeys = eventKeys
             context.coordinator.renderedFallbackKey = fallbackKey
-            mapView.removeAnnotations(mapView.annotations)
-            mapView.addAnnotations(events.map(EventMapAnnotation.init(event:)))
+
+            let eventAnnotations = mapView.annotations.compactMap { $0 as? EventMapAnnotation }
+            mapView.removeAnnotations(eventAnnotations)
+            mapView.addAnnotations(makeAnnotations(for: events))
 
             if !events.isEmpty {
-                fit(events: events, in: mapView, animated: true)
+                fit(events: events, in: mapView, animated: false)
             } else {
                 mapView.setRegion(
                     MKCoordinateRegion(
                         center: fallbackCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+                        span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06)
                     ),
-                    animated: true
+                    animated: false
                 )
             }
         }
@@ -1016,29 +1020,74 @@ private struct EventsMapView: UIViewRepresentable {
             mapView.setRegion(
                 MKCoordinateRegion(
                     center: event.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
+                    span: MKCoordinateSpan(latitudeDelta: 0.045, longitudeDelta: 0.045)
                 ),
                 animated: animated
             )
             return
         }
 
-        let points = events.map { MKMapPoint($0.coordinate) }
-        let rect = points.reduce(MKMapRect.null) { partialResult, point in
-            partialResult.union(MKMapRect(x: point.x, y: point.y, width: 1, height: 1))
+        let latitudes = events.map(\.latitude)
+        let longitudes = events.map(\.longitude)
+        guard let minLatitude = latitudes.min(),
+              let maxLatitude = latitudes.max(),
+              let minLongitude = longitudes.min(),
+              let maxLongitude = longitudes.max() else {
+            return
         }
-        mapView.setVisibleMapRect(
-            rect,
-            edgePadding: UIEdgeInsets(top: 60, left: 50, bottom: 120, right: 50),
+
+        let center = CLLocationCoordinate2D(
+            latitude: (minLatitude + maxLatitude) / 2,
+            longitude: (minLongitude + maxLongitude) / 2
+        )
+        let latitudeSpan = max((maxLatitude - minLatitude) * 1.35, 0.045)
+        let longitudeSpan = max((maxLongitude - minLongitude) * 1.35, 0.045)
+
+        mapView.setRegion(
+            MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: latitudeSpan, longitudeDelta: longitudeSpan)
+            ),
             animated: animated
         )
+    }
+
+    private func makeAnnotations(for events: [EventResponse]) -> [EventMapAnnotation] {
+        let indexedEvents = events.enumerated().map { (index: $0.offset, event: $0.element) }
+        let eventsByCoordinate = Dictionary(grouping: indexedEvents) { item in
+            coordinateKey(for: item.event.coordinate)
+        }
+
+        return eventsByCoordinate.values
+            .flatMap { group -> [EventMapAnnotation] in
+                let sortedGroup = group.sorted { $0.index < $1.index }
+
+                guard sortedGroup.count > 1 else {
+                    return sortedGroup.map { EventMapAnnotation(event: $0.event) }
+                }
+
+                return sortedGroup.enumerated().map { position, item in
+                    let angle = (Double(position) / Double(sortedGroup.count)) * 2 * Double.pi
+                    let radius = 0.00022 * Double(1 + position / 8)
+                    let coordinate = CLLocationCoordinate2D(
+                        latitude: item.event.latitude + sin(angle) * radius,
+                        longitude: item.event.longitude + cos(angle) * radius
+                    )
+                    return EventMapAnnotation(event: item.event, coordinate: coordinate)
+                }
+            }
+            .sorted { $0.event.id < $1.event.id }
+    }
+
+    private func coordinateKey(for coordinate: CLLocationCoordinate2D) -> String {
+        "\(coordinate.latitude.rounded(toPlaces: 5)):\(coordinate.longitude.rounded(toPlaces: 5))"
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         let onSelectEvent: (EventResponse) -> Void
         let onTapMap: () -> Void
 
-        var renderedEventIDs: [String] = []
+        var renderedEventKeys: [String] = []
         var renderedFallbackKey: String?
         var selectedEventID: String?
 
@@ -1064,11 +1113,14 @@ private struct EventsMapView: UIViewRepresentable {
                 ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
             view.annotation = annotation
             view.canShowCallout = false
+            view.displayPriority = .required
 
             if let markerView = view as? MKMarkerAnnotationView {
                 markerView.markerTintColor = Color(red: 44/255, green: 67/255, blue: 102/255).uiColor
                 markerView.glyphImage = UIImage(systemName: "figure.wave")
                 markerView.glyphTintColor = .white
+                markerView.titleVisibility = .hidden
+                markerView.subtitleVisibility = .hidden
             }
 
             return view
@@ -1102,17 +1154,25 @@ private struct EventsMapView: UIViewRepresentable {
 
 private final class EventMapAnnotation: NSObject, MKAnnotation {
     nonisolated let event: EventResponse
+    private let displayCoordinate: CLLocationCoordinate2D
 
     nonisolated var coordinate: CLLocationCoordinate2D {
-        event.coordinate
+        displayCoordinate
     }
 
-    nonisolated var title: String? {
-        event.title
-    }
+    nonisolated var title: String? { nil }
+    nonisolated var subtitle: String? { nil }
 
-    nonisolated init(event: EventResponse) {
+    nonisolated init(event: EventResponse, coordinate: CLLocationCoordinate2D? = nil) {
         self.event = event
+        self.displayCoordinate = coordinate ?? event.coordinate
+    }
+}
+
+private extension Double {
+    func rounded(toPlaces places: Int) -> Double {
+        let divisor = pow(10.0, Double(places))
+        return (self * divisor).rounded() / divisor
     }
 }
 
