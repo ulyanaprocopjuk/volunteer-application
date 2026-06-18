@@ -10,9 +10,22 @@
 		443BD9B22F4634E600429D5A /* volunteerClient.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = volunteerClient.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		44CAA1C02F8FFD960062C100 /* Exceptions for "volunteerClient" folder in "volunteerClient" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 443BD9B12F4634E500429D5A /* volunteerClient */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		443BD9B42F4634E600429D5A /* volunteerClient */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				44CAA1C02F8FFD960062C100 /* Exceptions for "volunteerClient" folder in "volunteerClient" target */,
+			);
 			path = volunteerClient;
 			sourceTree = "<group>";
 		};
@@ -64,8 +77,6 @@
 				443BD9B42F4634E600429D5A /* volunteerClient */,
 			);
 			name = volunteerClient;
-			packageProductDependencies = (
-			);
 			productName = volunteerClient;
 			productReference = 443BD9B22F4634E600429D5A /* volunteerClient.app */;
 			productType = "com.apple.product-type.application";
@@ -256,6 +267,8 @@
 				DEVELOPMENT_TEAM = YPV4RL9PLG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = volunteerClient/Info.plist;
+				INFOPLIST_KEY_UIAppFonts = "Resources/fonts/NotoSans-Regular.ttf Resources/fonts/NotoSans-Medium.ttf Resources/fonts/NotoSans-SemiBold.ttf Resources/fonts/NotoSans-Bold.ttf Resources/fonts/Kadwa-Regular.ttf Resources/fonts/Kadwa-Bold.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -288,6 +301,8 @@
 				DEVELOPMENT_TEAM = YPV4RL9PLG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = volunteerClient/Info.plist;
+				INFOPLIST_KEY_UIAppFonts = "Resources/fonts/NotoSans-Regular.ttf Resources/fonts/NotoSans-Medium.ttf Resources/fonts/NotoSans-SemiBold.ttf Resources/fonts/NotoSans-Bold.ttf Resources/fonts/Kadwa-Regular.ttf Resources/fonts/Kadwa-Bold.ttf";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
